@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table'
+import { Spinner } from '../components/ui/spinner'
 import { fetchStudents } from '../lib/firestore'
 
 export const Students = () => {
@@ -92,22 +93,17 @@ export const Students = () => {
   const startItem = rows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
   const endItem = Math.min(currentPage * PAGE_SIZE, rows.length)
 
-  const Spinner = () => (
-    <div className="flex items-center justify-center py-10">
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-gray-700"
-        aria-label="Loading"
-      />
-    </div>
-  )
-
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>Students</CardTitle>
       </CardHeader>
       <CardContent>
-        {loading && <Spinner />}
+        {loading && (
+          <div className="flex items-center justify-center py-10">
+            <Spinner />
+          </div>
+        )}
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         {!loading && !error && rows.length === 0 && (

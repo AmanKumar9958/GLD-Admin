@@ -24,6 +24,7 @@ import {
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Checkbox } from '../../components/ui/checkbox'
+import { Spinner } from '../../components/ui/spinner'
 import {
   createCourse,
   createModule,
@@ -193,7 +194,10 @@ export const CourseForm = () => {
               Cancel
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Course'}
+              {saving ? <Spinner size="sm" className="border-t-white" label="Saving" /> : null}
+              <span className={saving ? 'sr-only' : ''}>
+                {isEditing ? 'Save Changes' : 'Create Course'}
+              </span>
             </Button>
           </CardFooter>
         </form>
@@ -225,7 +229,11 @@ export const CourseForm = () => {
                   Add Module
                 </Button>
               </div>
-              {loading && <p className="text-sm text-gray-600">Loading modules...</p>}
+              {loading && (
+                <div className="flex items-center justify-center py-8">
+                  <Spinner />
+                </div>
+              )}
               {!loading && modules.length === 0 && (
                 <p className="text-sm text-gray-600">No modules yet. Add your first module.</p>
               )}
@@ -349,7 +357,8 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Video'}
+                  {saving ? <Spinner size="sm" className="border-t-white" label="Saving" /> : null}
+                  <span className={saving ? 'sr-only' : ''}>Save Video</span>
                 </Button>
               </DialogFooter>
             </form>

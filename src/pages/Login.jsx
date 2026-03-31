@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { Spinner } from '../components/ui/spinner'
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, 'Admin ID is required'),
@@ -76,7 +77,8 @@ export const Login = () => {
               <p className="text-sm text-red-600">{formError || error}</p>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? <Spinner size="sm" className="border-t-white" label="Signing in" /> : null}
+              <span className={loading ? 'sr-only' : ''}>Sign In</span>
             </Button>
           </form>
         </CardContent>
