@@ -30,8 +30,11 @@ export const AuthProvider = ({ children }) => {
     setError(null)
 
     try {
-      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        const authenticatedUser = { email }
+      const normalizedEmail = email.trim().toLowerCase()
+      const normalizedPassword = password.trim()
+
+      if (normalizedEmail === ADMIN_EMAIL && normalizedPassword === ADMIN_PASSWORD) {
+        const authenticatedUser = { email: normalizedEmail }
         setUser(authenticatedUser)
         return { success: true }
       }

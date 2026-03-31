@@ -19,6 +19,26 @@ function ensureDb() {
 }
 
 const coursesCollection = collection(db, 'courses')
+const studentsCollection = collection(db, 'users')
+
+export async function fetchStudents() {
+  ensureDb()
+  const snapshot = await getDocs(studentsCollection)
+  return snapshot.docs.map((studentDoc) => ({
+    id: studentDoc.id,
+    ...studentDoc.data(),
+  }))
+}
+
+export async function fetchStudentImage(){
+  studentsCollection.get().then((querySnapshot) => {
+    querySnapshot.forEach((doc) => {
+        console.log(doc.data().imageUrl)
+    })
+}).catch((error) => {
+    console.log("Error getting documents: ", error);
+});
+}
 
 export async function fetchCourses() {
   ensureDb()

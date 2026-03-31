@@ -10,7 +10,7 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().min(1, 'Admin ID is required'),
   password: z.string().min(4),
 })
 
@@ -49,11 +49,11 @@ export const Login = () => {
         <CardContent className="space-y-4">
           <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Admin ID</Label>
               <Input
                 id="email"
-                type="email"
-                placeholder="admin@gld2026"
+                type="text"
+                placeholder="Admin ID"
                 {...form.register('email')}
               />
               {form.formState.errors.email?.message && (
@@ -78,9 +78,6 @@ export const Login = () => {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
-            <p className="text-center text-xs text-gray-500">
-              Email: <strong>admin@gld2026</strong> | Password: <strong>admin@gld</strong>
-            </p>
           </form>
         </CardContent>
       </Card>

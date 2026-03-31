@@ -12,7 +12,7 @@ export const Header = () => {
         GLD Admin Panel
       </Link>
       <div className="flex items-center gap-4">
-        {user?.email && <span className="text-sm text-gray-600">{user.email}</span>}
+        {user?.email && <span className="text-sm text-gray-600">GLD Admin</span>}
         <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
           <LogOut className="h-4 w-4" />
           Logout
