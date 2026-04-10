@@ -163,12 +163,13 @@ export async function uploadThumbnail(file) {
 }
 
 /**
- * STUDENTS / PROFILES
+ * STUDENTS / USERS
  */
 export async function fetchStudents() {
   const { data, error } = await supabase
-    .from('profiles')
+    .from('users')
     .select('*')
+    .neq('role', 'admin')
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -176,17 +177,17 @@ export async function fetchStudents() {
 }
 
 export async function fetchDashboardStats() {
-  const [coursesCount, profilesCount] = await Promise.all([
+  const [coursesCount, usersCount] = await Promise.all([
     supabase.from('courses').select('*', { count: 'exact', head: true }),
-    supabase.from('profiles').select('*', { count: 'exact', head: true })
+    supabase.from('users').select('*', { count: 'exact', head: true }).neq('role', 'admin')
   ])
 
   if (coursesCount.error) throw coursesCount.error
-  if (profilesCount.error) throw profilesCount.error
+  if (usersCount.error) throw usersCount.error
 
   return {
     courses: coursesCount.count || 0,
-    students: profilesCount.count || 0
+    students: usersCount.count || 0
   }
 }
 

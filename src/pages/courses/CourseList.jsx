@@ -78,7 +78,7 @@ export const CourseList = () => {
                   <TableCell className="font-medium">{course.title}</TableCell>
                   <TableCell>{course.category}</TableCell>
                   <TableCell>{course.instructor_name || course.instructorName || 'N/A'}</TableCell>
-                  <TableCell>${Number(course.price || 0).toFixed(2)}</TableCell>
+                  <TableCell>₹{Number(course.price || 0).toFixed(2)}</TableCell>
                   <TableCell>
                     <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
                       (course.is_published ?? course.isPublished) 

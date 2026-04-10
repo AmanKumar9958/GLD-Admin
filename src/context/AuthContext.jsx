@@ -32,38 +32,17 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setLoading(true)
     setError(null)
-
-    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL
-    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD
-
     try {
-      // 1. Try Supabase Auth first
       const { data, error: sbError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
       })
 
-      if (!sbError) {
-        setUser(data.user)
-        setSession(data.session)
-        return { success: true }
-      }
+      if (sbError) throw sbError
 
-      // 2. Fallback to .env hardcoded credentials if Supabase fails
-      if (email.trim() === adminEmail && password.trim() === adminPassword) {
-        const mockUser = {
-          id: 'admin-local',
-          email: adminEmail,
-          user_metadata: { full_name: 'Local Admin' },
-          role: 'admin'
-        }
-        setUser(mockUser)
-        setSession({ user: mockUser, access_token: 'local-session' })
-        return { success: true }
-      }
-
-      // If both fail, throw the Supabase error
-      throw sbError
+      setUser(data.user)
+      setSession(data.session)
+      return { success: true }
     } catch (err) {
       setError(err.message)
       return { success: false, message: err.message }
