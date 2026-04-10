@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Spinner } from '../../components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
-import { deleteCourse, fetchCourses } from '../../lib/firestore'
+import { deleteCourse, fetchCourses } from '../../services/courseService'
 
 export const CourseList = () => {
   const navigate = useNavigate()
@@ -32,8 +32,12 @@ export const CourseList = () => {
     const shouldDelete = window.confirm('Delete this course?')
     if (!shouldDelete) return
 
-    await deleteCourse(courseId)
-    loadCourses()
+    try {
+      await deleteCourse(courseId)
+      loadCourses()
+    } catch (err) {
+      setError(err.message || 'Failed to delete course')
+    }
   }
 
   return (
@@ -73,11 +77,15 @@ export const CourseList = () => {
                 <TableRow key={course.id}>
                   <TableCell className="font-medium">{course.title}</TableCell>
                   <TableCell>{course.category}</TableCell>
-                  <TableCell>{course.instructorName}</TableCell>
+                  <TableCell>{course.instructor_name || course.instructorName || 'N/A'}</TableCell>
                   <TableCell>${Number(course.price || 0).toFixed(2)}</TableCell>
                   <TableCell>
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                      {course.isPublished ? 'Published' : 'Draft'}
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                      (course.is_published ?? course.isPublished) 
+                        ? 'bg-emerald-50 text-emerald-700' 
+                        : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {(course.is_published ?? course.isPublished) ? 'Published' : 'Draft'}
                     </span>
                   </TableCell>
                   <TableCell className="flex justify-end gap-2">
@@ -101,3 +109,4 @@ export const CourseList = () => {
     </Card>
   )
 }
+

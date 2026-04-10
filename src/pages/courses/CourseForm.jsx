@@ -30,9 +30,9 @@ import {
   createModule,
   createVideo,
   fetchCourseWithRelations,
-  fetchModulesWithVideos,
   updateCourse,
-} from '../../lib/firestore'
+  uploadThumbnail,
+} from '../../services/courseService'
 
 const courseSchema = z.object({
   title: z.string().min(2, 'Title is required'),
@@ -51,6 +51,8 @@ export const CourseForm = () => {
   const [saving, setSaving] = useState(false)
   const [moduleTitle, setModuleTitle] = useState('')
   const [error, setError] = useState('')
+  const [thumbnailFile, setThumbnailFile] = useState(null)
+  const [thumbnailPreview, setThumbnailPreview] = useState('')
 
   const form = useForm({
     resolver: zodResolver(courseSchema),
@@ -78,10 +80,13 @@ export const CourseForm = () => {
             title: course.title || '',
             category: course.category || '',
             price: course.price || 0,
-            instructorName: course.instructorName || '',
-            isPublished: !!course.isPublished,
+            instructorName: course.instructor_name || course.instructorName || '',
+            isPublished: !!(course.is_published ?? course.isPublished),
           })
           setModules(course.modules || [])
+          if (course.thumbnail_url) {
+            setThumbnailPreview(course.thumbnail_url)
+          }
         }
       } catch (err) {
         setError(err.message || 'Failed to load course')
@@ -95,18 +100,29 @@ export const CourseForm = () => {
 
   const refreshModules = async () => {
     if (!id) return
-    const next = await fetchModulesWithVideos(id)
-    setModules(next)
+    const course = await fetchCourseWithRelations(id)
+    setModules(course.modules || [])
   }
 
   const onSubmit = async (values) => {
     setSaving(true)
     setError('')
     try {
+      let thumbnailUrl = thumbnailPreview
+
+      if (thumbnailFile) {
+        thumbnailUrl = await uploadThumbnail(thumbnailFile)
+      }
+
+      const payload = {
+        ...values,
+        thumbnailUrl,
+      }
+
       if (isEditing) {
-        await updateCourse(id, values)
+        await updateCourse(id, payload)
       } else {
-        const newCourseId = await createCourse(values)
+        const newCourseId = await createCourse(payload)
         navigate(`/courses/${newCourseId}`, { replace: true })
         return
       }
@@ -126,6 +142,14 @@ export const CourseForm = () => {
       refreshModules()
     } catch (err) {
       setError(err.message || 'Unable to add module')
+    }
+  }
+
+  const handleThumbnailChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setThumbnailFile(file)
+      setThumbnailPreview(URL.createObjectURL(file))
     }
   }
 
@@ -178,7 +202,25 @@ export const CourseForm = () => {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="space-y-2">
+              <Label htmlFor="thumbnail">Thumbnail</Label>
+              <div className="flex items-center gap-4">
+                {thumbnailPreview && (
+                  <img
+                    src={thumbnailPreview}
+                    alt="Preview"
+                    className="h-16 w-16 rounded-md object-cover"
+                  />
+                )}
+                <Input
+                  id="thumbnail"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleThumbnailChange}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-8">
               <Checkbox
                 id="isPublished"
                 checked={form.watch('isPublished')}
@@ -286,10 +328,14 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
     setSaving(true)
     setError('')
     try {
-      await createVideo(courseId, module.id, {
+      // Mock upload to Bunny.net preserved as requested
+      const { bunnyVideoId } = await mockUploadToBunny(values.file)
+
+      await createVideo(module.id, {
         ...values,
-        file: values.file,
+        bunnyVideoId,
       })
+      
       setDialogOpen(false)
       form.reset()
       onVideoCreated?.()
@@ -298,6 +344,16 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Placeholder for Bunny.net upload preserved as requested
+  const mockUploadToBunny = async (file) => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const fakeId = `bunny_${Date.now()}_${file?.name || 'video'}`
+        resolve({ bunnyVideoId: fakeId })
+      }, 400)
+    })
   }
 
   return (
@@ -375,11 +431,11 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
               <div>
                 <p className="font-medium">{video.title}</p>
                 <p className="text-xs text-gray-500">
-                  {video.duration} min • {video.isPreview ? 'Preview' : 'Full'}
+                  {video.duration} min • {video.is_preview ? 'Preview' : 'Full'}
                 </p>
               </div>
               <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                {video.bunnyVideoId}
+                {video.bunny_video_id}
               </span>
             </div>
           ))
@@ -390,3 +446,4 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
     </div>
   )
 }
+

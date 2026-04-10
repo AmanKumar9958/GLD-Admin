@@ -9,7 +9,7 @@ import {
   TableRow,
 } from '../components/ui/table'
 import { Spinner } from '../components/ui/spinner'
-import { fetchStudents } from '../lib/firestore'
+import { fetchStudents } from '../services/courseService'
 
 export const Students = () => {
   const PAGE_SIZE = 7
@@ -38,18 +38,12 @@ export const Students = () => {
   const rows = useMemo(
     () =>
       students.map((student) => {
-        const name = student.name || student.fullName || student.studentName || 'N/A'
+        const name = student.full_name || student.name || student.fullName || 'N/A'
         const email = student.email || student.mail || 'N/A'
-
-        const createdValue =
-          student.createdAt || student.accountCreatedAt || student.createdOn || student.created
+        const createdValue = student.created_at || student.createdAt || student.accountCreatedAt
 
         let created = 'N/A'
-        if (createdValue?.toDate) {
-          created = createdValue.toDate().toLocaleString()
-        } else if (createdValue?.seconds) {
-          created = new Date(createdValue.seconds * 1000).toLocaleString()
-        } else if (typeof createdValue === 'string' || typeof createdValue === 'number') {
+        if (createdValue) {
           const parsed = new Date(createdValue)
           if (!Number.isNaN(parsed.getTime())) {
             created = parsed.toLocaleString()
@@ -62,16 +56,16 @@ export const Students = () => {
           email,
           created,
           imageUrl:
+            student.avatar_url ||
             student.imageUrl ||
             student.photoURL ||
             student.profileImage ||
-            student.avatar ||
-            student.image ||
             '',
         }
       }),
     [students],
   )
+
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
 
