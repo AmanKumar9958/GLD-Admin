@@ -33,6 +33,8 @@ import {
   updateCourse,
   uploadThumbnail,
 } from '../../services/courseService'
+import { Progress } from '../../components/ui/progress'
+import { uploadVideoToBunny } from '../../services/bunnyService'
 
 const courseSchema = z.object({
   title: z.string().min(2, 'Title is required'),
@@ -311,6 +313,7 @@ const videoSchema = z.object({
 const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState('')
 
   const form = useForm({
@@ -327,13 +330,13 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
     if (!courseId || !module?.id) return
     setSaving(true)
     setError('')
+    setUploadProgress(0)
     try {
-      // Mock upload to Bunny.net preserved as requested
-      const { bunnyVideoId } = await mockUploadToBunny(values.file)
+      const { videoId } = await uploadVideoToBunny(values.file, values.title, setUploadProgress)
 
       await createVideo(module.id, {
         ...values,
-        bunnyVideoId,
+        bunnyVideoId: videoId,
       })
       
       setDialogOpen(false)
@@ -346,15 +349,6 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
     }
   }
 
-  // Placeholder for Bunny.net upload preserved as requested
-  const mockUploadToBunny = async (file) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const fakeId = `bunny_${Date.now()}_${file?.name || 'video'}`
-        resolve({ bunnyVideoId: fakeId })
-      }, 400)
-    })
-  }
 
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -407,6 +401,17 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
                   }}
                 />
               </div>
+
+              {saving && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Uploading to Bunny.net...</span>
+                    <span className="font-medium">{uploadProgress}%</span>
+                  </div>
+                  <Progress value={uploadProgress} />
+                </div>
+              )}
+
               {error && <p className="text-sm text-red-600">{error}</p>}
               <DialogFooter>
                 <Button variant="ghost" type="button" onClick={() => setDialogOpen(false)}>
