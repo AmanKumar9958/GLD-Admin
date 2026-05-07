@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
         tokens: chunk,
       }
 
-      const response = await messaging.sendMulticast(message)
+      const response = await messaging.sendEachForMulticast(message)
       successCount += response.successCount
       failureCount += response.failureCount
       
