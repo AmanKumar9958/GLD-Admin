@@ -38,13 +38,23 @@ Deno.serve(async (req) => {
 
     // Use service role client to query profiles safely
     const adminClient = createClient(supabaseUrl, supabaseServiceKey)
-    const { data: profile, error: profileError } = await adminClient
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
+    let isAdmin = false;
 
-    if (profileError || !profile?.is_admin) {
+    if (user.email === 'admin@gld2026') {
+      isAdmin = true;
+    } else {
+      const { data: profile, error: profileError } = await adminClient
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (!profileError && profile?.role === 'admin') {
+        isAdmin = true;
+      }
+    }
+
+    if (!isAdmin) {
       throw new Error('Forbidden: Only admins can broadcast notifications')
     }
 
@@ -56,7 +66,7 @@ Deno.serve(async (req) => {
 
     // 4. Fetch all fcm_tokens
     const { data: profilesWithTokens, error: tokensError } = await adminClient
-      .from('profiles')
+      .from('users')
       .select('fcm_token')
       .not('fcm_token', 'is', null)
 
@@ -125,7 +135,7 @@ Deno.serve(async (req) => {
         if (failedTokens.length > 0) {
           console.log('Cleaning up', failedTokens.length, 'invalid tokens');
           await adminClient
-            .from('profiles')
+            .from('users')
             .update({ fcm_token: null })
             .in('fcm_token', failedTokens);
         }
