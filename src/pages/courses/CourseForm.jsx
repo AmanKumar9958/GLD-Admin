@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { CheckCircle2, XCircle, Loader2, ChevronUp, ChevronDown, X } from 'lucide-react'
+import { uploadStore, useUploads } from '../../store/uploadStore'
 import {
   Accordion,
   AccordionContent,
@@ -296,8 +298,95 @@ export const CourseForm = () => {
           )}
         </CardContent>
       </Card>
+      <GlobalUploadWidget />
     </div>
   )
+}
+
+const GlobalUploadWidget = () => {
+  const uploads = useUploads();
+  const [isMinimized, setIsMinimized] = useState(false);
+
+  // Auto-hide when complete and wait a few seconds
+  useEffect(() => {
+    if (uploads.length > 0 && uploads.every(u => u.status === 'complete')) {
+      const timer = setTimeout(() => {
+        uploadStore.clearCompleted();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [uploads]);
+
+  if (!uploads.length) return null;
+
+  const uploadingCount = uploads.filter(u => u.status === 'uploading').length;
+  const completeCount = uploads.filter(u => u.status === 'complete').length;
+  const errorCount = uploads.filter(u => u.status === 'error').length;
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 w-80 rounded-lg shadow-2xl overflow-hidden border border-gray-200 bg-white font-sans animate-in slide-in-from-bottom-8">
+      {/* Header */}
+      <div 
+        className="flex items-center justify-between bg-gray-900 px-4 py-3 cursor-pointer text-white transition-colors hover:bg-gray-800"
+        onClick={() => setIsMinimized(!isMinimized)}
+      >
+        <div className="flex flex-col">
+          <span className="text-sm font-semibold">
+            {uploadingCount > 0 
+              ? `Uploading ${uploadingCount} item${uploadingCount > 1 ? 's' : ''}...` 
+              : `${completeCount} upload${completeCount > 1 ? 's' : ''} complete`}
+          </span>
+          {errorCount > 0 && <span className="text-xs text-red-400">{errorCount} failed</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="focus:outline-none">
+            {isMinimized ? <ChevronUp className="w-5 h-5 text-gray-400 hover:text-white" /> : <ChevronDown className="w-5 h-5 text-gray-400 hover:text-white" />}
+          </button>
+          {uploadingCount === 0 && (
+            <button 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                uploadStore.clearCompleted(); 
+              }} 
+              className="focus:outline-none"
+            >
+              <X className="w-5 h-5 text-gray-400 hover:text-white" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Upload List */}
+      {!isMinimized && (
+        <div className="max-h-64 overflow-y-auto bg-gray-50/50">
+          {uploads.map(u => (
+            <div key={u.id} className="flex flex-col border-b border-gray-100 last:border-0 p-3 bg-white">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex flex-col overflow-hidden pr-2">
+                  <span className="text-sm font-medium text-gray-800 truncate" title={u.title}>{u.title}</span>
+                  {u.error && <span className="text-xs text-red-600 truncate" title={u.error}>{u.error}</span>}
+                </div>
+                <div className="flex-shrink-0 flex items-center justify-center w-6">
+                  {u.status === 'uploading' && (
+                    <div className="relative flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                    </div>
+                  )}
+                  {u.status === 'complete' && <CheckCircle2 className="w-5 h-5 text-green-500" />}
+                  {u.status === 'error' && <XCircle className="w-5 h-5 text-red-500" />}
+                </div>
+              </div>
+              {u.status === 'uploading' && (
+                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-indigo-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${u.progress}%` }}></div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const ChapterItem = ({ chapter, courseId, onRefresh }) => {
@@ -497,9 +586,6 @@ const videoSchema = z.object({
 
 const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [error, setError] = useState('')
 
   const form = useForm({
     resolver: zodResolver(videoSchema),
@@ -511,29 +597,41 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
     },
   })
 
-  const submitVideo = async (values) => {
+  const submitVideo = (values) => {
     if (!courseId || !module?.id) return
-    setSaving(true)
-    setError('')
-    setUploadProgress(0)
-    try {
-      const { videoId } = await uploadVideoToBunny(values.file, values.title, setUploadProgress)
+    const uploadId = Date.now().toString()
 
-      await createVideo(module.id, {
-        ...values,
-        bunnyVideoId: videoId,
-      })
-      
-      setDialogOpen(false)
-      form.reset()
-      onVideoCreated?.()
-    } catch (err) {
-      setError(err.message || 'Unable to add video')
-    } finally {
-      setSaving(false)
-    }
+    setDialogOpen(false)
+    form.reset()
+
+    uploadStore.addUpload({
+      id: uploadId,
+      title: values.title,
+      progress: 0,
+      error: null
+    })
+
+    // Background upload execution
+    ;(async () => {
+      try {
+        const { videoId } = await uploadVideoToBunny(
+          values.file, 
+          values.title, 
+          (prog) => uploadStore.updateUpload(uploadId, { progress: prog })
+        )
+
+        await createVideo(module.id, {
+          ...values,
+          bunnyVideoId: videoId,
+        })
+        
+        uploadStore.updateUpload(uploadId, { status: 'complete', progress: 100 })
+        onVideoCreated?.()
+      } catch (err) {
+        uploadStore.updateUpload(uploadId, { status: 'error', error: err.message || 'Unable to add video' })
+      }
+    })()
   }
-
 
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -587,36 +685,26 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
                 />
               </div>
 
-              {saving && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Uploading to Bunny.net...</span>
-                    <span className="font-medium">{uploadProgress}%</span>
-                  </div>
-                  <Progress value={uploadProgress} />
-                </div>
-              )}
-
-              {error && <p className="text-sm text-red-600">{error}</p>}
               <DialogFooter>
                 <Button variant="ghost" type="button" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={saving}>
-                  {saving ? <Spinner size="sm" className="border-t-white" label="Saving" /> : null}
-                  <span className={saving ? 'sr-only' : ''}>Save Video</span>
+                <Button type="submit">
+                  Save Video
                 </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
       </div>
+
       <div className="space-y-2">
+        {/* Render completed videos */}
         {module.videos?.length ? (
           module.videos.map((video) => (
             <div
               key={video.id}
-              className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-sm"
+              className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-sm shadow-sm border border-gray-100"
             >
               <div>
                 <p className="font-medium">{video.title}</p>

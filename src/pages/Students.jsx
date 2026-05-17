@@ -14,6 +14,7 @@ import { fetchStudents } from '../services/courseService'
 export const Students = () => {
   const PAGE_SIZE = 7
   const [students, setStudents] = useState([])
+  const [totalStudents, setTotalStudents] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -23,8 +24,9 @@ export const Students = () => {
       try {
         setLoading(true)
         setError('')
-        const data = await fetchStudents()
+        const { students: data, totalCount } = await fetchStudents(currentPage, PAGE_SIZE)
         setStudents(data)
+        setTotalStudents(totalCount)
       } catch (err) {
         setError(err.message || 'Failed to load students')
       } finally {
@@ -33,8 +35,9 @@ export const Students = () => {
     }
 
     loadStudents()
-  }, [])
+  }, [currentPage]) // Re-run whenever currentPage changes
 
+  // Format the exactly 7 rows returned by the server
   const rows = useMemo(
     () =>
       students.map((student) => {
@@ -66,26 +69,17 @@ export const Students = () => {
     [students],
   )
 
+  const totalPages = Math.max(1, Math.ceil(totalStudents / PAGE_SIZE))
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
-
+  // Ensure current page is valid if students are deleted
   useEffect(() => {
-    setCurrentPage(1)
-  }, [rows.length])
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
+    if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(totalPages)
     }
   }, [currentPage, totalPages])
 
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return rows.slice(start, start + PAGE_SIZE)
-  }, [currentPage, rows])
-
-  const startItem = rows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
-  const endItem = Math.min(currentPage * PAGE_SIZE, rows.length)
+  const startItem = totalStudents === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+  const endItem = Math.min(currentPage * PAGE_SIZE, totalStudents)
 
   return (
     <Card className="w-full">
@@ -100,11 +94,11 @@ export const Students = () => {
         )}
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        {!loading && !error && rows.length === 0 && (
+        {!loading && !error && totalStudents === 0 && (
           <p className="text-sm text-gray-600">No students found in DB.</p>
         )}
 
-        {!loading && !error && rows.length > 0 && (
+        {!loading && !error && totalStudents > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
@@ -115,7 +109,7 @@ export const Students = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedRows.map((student) => (
+              {rows.map((student) => (
                 <TableRow key={student.id}>
                   <TableCell>
                     {student.imageUrl ? (
@@ -148,10 +142,10 @@ export const Students = () => {
           </Table>
         )}
 
-        {!loading && !error && rows.length > 0 && (
+        {!loading && !error && totalStudents > 0 && (
           <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
             <p>
-              Showing {startItem}-{endItem} of {rows.length} students
+              Showing {startItem}-{endItem} of {totalStudents} students
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -164,6 +158,19 @@ export const Students = () => {
               </button>
               {Array.from({ length: totalPages }).map((_, index) => {
                 const pageNumber = index + 1
+                
+                // Show a limited number of pages to avoid UI overflow when there are 100+ pages
+                if (
+                  pageNumber !== 1 &&
+                  pageNumber !== totalPages &&
+                  Math.abs(pageNumber - currentPage) > 2
+                ) {
+                  if (Math.abs(pageNumber - currentPage) === 3) {
+                    return <span key={pageNumber} className="px-1">...</span>
+                  }
+                  return null
+                }
+
                 const isActive = pageNumber === currentPage
 
                 return (

@@ -1,87 +1,65 @@
-const LIBRARY_ID = String(import.meta.env.VITE_LIBRARY_ID || '').trim()
-const API_KEY = String(import.meta.env.VITE_API_KEY || '').trim()
+import * as tus from 'tus-js-client';
+import { supabase } from '../lib/supabase'; // Adjust this path if your supabase client is located elsewhere
 
-/**
- * Uploads a video file to Bunny.net Stream
- * 1. Creates a video entry to get a GUID
- * 2. Uploads the actual binary data using a PUT request
- * 
- * @param {File} file - The video file to upload
- * @param {string} title - The title for the video entry
- * @param {function} onProgress - Optional callback for upload progress (0-100)
- * @returns {Promise<{ videoId: string }>}
- */
 export async function uploadVideoToBunny(file, title, onProgress) {
-  if (!LIBRARY_ID || !API_KEY) {
-    throw new Error('Bunny.net configuration is missing in .env')
+  // 1. Get session for authenticated request
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  
+  if (sessionError || !session) {
+    throw new Error('You must be logged in to upload videos.');
   }
 
-  // 1. Create Video Entry
-  const createResponse = await fetch(
-    `https://video.bunnycdn.com/library/${LIBRARY_ID}/videos`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'AccessKey': API_KEY,
-        'accept': 'application/json',
-      },
-      body: JSON.stringify({ title }),
-    }
-  )
+  // 2. Request a secure upload signature from your new Edge Function
+  // Ensure VITE_SUPABASE_URL is set in your Admin .env file
+  const edgeFunctionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-bunny-video`;
+  
+  const signatureResponse = await fetch(edgeFunctionUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`
+    },
+    body: JSON.stringify({ title })
+  });
 
-  if (!createResponse.ok) {
-    let errorMessage = `Failed to create video entry (${createResponse.status})`
-    try {
-      const errorData = await createResponse.json()
-      errorMessage = errorData.message || errorMessage
-      console.error('Bunny.net Error Detail:', errorData)
-    } catch (e) {
-      // ignore
-    }
-    throw new Error(errorMessage)
+  if (!signatureResponse.ok) {
+    const errorData = await signatureResponse.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to create video signature (${signatureResponse.status})`);
   }
 
-  const createData = await createResponse.json()
-  const videoId = createData.guid
+  const { videoId, libraryId, authorizationSignature, authorizationExpire } = await signatureResponse.json();
 
-  // 2. Upload Video File using XMLHttpRequest for progress
+  // 3. Upload the video directly to Bunny.net using TUS protocol and secure signatures
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    
-    xhr.open(
-      'PUT',
-      `https://video.bunnycdn.com/library/${LIBRARY_ID}/videos/${videoId}`
-    )
-    xhr.setRequestHeader('AccessKey', API_KEY)
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
-
-    if (xhr.upload && onProgress) {
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = (event.loaded / event.total) * 100
-          onProgress(Math.round(percentComplete))
+    const upload = new tus.Upload(file, {
+      endpoint: 'https://video.bunnycdn.com/tusupload',
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: {
+        AuthorizationSignature: authorizationSignature,
+        AuthorizationExpire: authorizationExpire.toString(),
+        VideoId: videoId,
+        LibraryId: libraryId.toString(),
+      },
+      metadata: {
+        filetype: file.type,
+        title: title,
+        collection: ''
+      },
+      onError: function (error) {
+        console.error('TUS Upload Error:', error);
+        reject(error);
+      },
+      onProgress: function (bytesUploaded, bytesTotal) {
+        const percentage = (bytesUploaded / bytesTotal) * 100;
+        if (onProgress) {
+          onProgress(Math.round(percentage));
         }
+      },
+      onSuccess: function () {
+        resolve({ videoId });
       }
-    }
+    });
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve({ videoId })
-      } else {
-        let errorMessage = `Upload failed with status ${xhr.status}`
-        try {
-          const response = JSON.parse(xhr.responseText)
-          errorMessage = response.message || errorMessage
-        } catch (e) {
-          // ignore parsing error
-        }
-        reject(new Error(errorMessage))
-      }
-    }
-
-    xhr.onerror = () => reject(new Error('Network error during upload'))
-    
-    xhr.send(file)
-  })
+    upload.start();
+  });
 }

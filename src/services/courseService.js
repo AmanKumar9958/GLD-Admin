@@ -179,15 +179,17 @@ export async function uploadThumbnail(file) {
 /**
  * STUDENTS / USERS
  */
-export async function fetchStudents() {
-  const { data, error } = await supabase
+export async function fetchStudents(page = 1, pageSize = 7) {
+  const start = (page - 1) * pageSize
+  const end = start + pageSize - 1
+  const { data, error, count } = await supabase
     .from('users')
-    .select('*')
+    .select('*', { count: 'exact' })
     .neq('role', 'admin')
     .order('created_at', { ascending: false })
-
+    .range(start, end)
   if (error) throw error
-  return data
+  return { students: data, totalCount: count || 0 }
 }
 
 export async function fetchDashboardStats() {

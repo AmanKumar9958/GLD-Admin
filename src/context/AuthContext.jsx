@@ -12,21 +12,48 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let isMounted = true
+
+    const fetchRoleAndSetUser = async (currentSession) => {
+      if (!currentSession?.user) {
+        if (isMounted) {
+          setSession(null)
+          setUser(null)
+          setLoading(false)
+        }
+        return
+      }
+
+      // Fetch the role from the users table
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', currentSession.user.id)
+        .single()
+
+      if (isMounted) {
+        setSession(currentSession)
+        // Attach the role to the user object
+        setUser({ ...currentSession.user, role: userData?.role })
+        setLoading(false)
+      }
+    }
+
     // Check active sessions and sets the user
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
+      fetchRoleAndSetUser(session)
     })
 
     // Listen for changes on auth state (logged in, signed out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
+      setLoading(true)
+      fetchRoleAndSetUser(session)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   const login = async (email, password) => {
@@ -40,7 +67,19 @@ export const AuthProvider = ({ children }) => {
 
       if (sbError) throw sbError
 
-      setUser(data.user)
+      // Verify the user is actually an admin before allowing the login
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+
+      if (userData?.role !== 'admin') {
+        await supabase.auth.signOut()
+        throw new Error('Unauthorized: Admin access required')
+      }
+
+      setUser({ ...data.user, role: userData.role })
       setSession(data.session)
       return { success: true }
     } catch (err) {
@@ -83,17 +122,18 @@ export const useAuth = () => {
 }
 
 export const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth()
+  const { user, isAuthenticated, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {
-    return null // Or a global spinner
+    // Show a blank screen or spinner while verifying role
+    return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>Loading...</div> 
   }
 
-  if (!isAuthenticated) {
+  // Reject unauthenticated users OR users who are not admins
+  if (!isAuthenticated || user?.role !== 'admin') {
     return <Navigate to="/login" replace state={{ from: location }} />
   }
 
   return children
 }
-
