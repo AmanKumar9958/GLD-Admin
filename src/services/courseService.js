@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
+import { uploadImageToCloudinary } from './cloudinaryService'
 
 /**
- * COURSES
  */
 export async function fetchCourses() {
   const { data, error } = await supabase
@@ -172,21 +172,8 @@ export async function createVideo(moduleId, payload) {
  * STORAGE (Thumbnails)
  */
 export async function uploadThumbnail(file) {
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`
-  const filePath = `course-thumbnails/${fileName}`
-
-  const { error: uploadError } = await supabase.storage
-    .from('thumbnails')
-    .upload(filePath, file)
-
-  if (uploadError) throw uploadError
-
-  const { data: { publicUrl } } = supabase.storage
-    .from('thumbnails')
-    .getPublicUrl(filePath)
-
-  return publicUrl
+  // Use Cloudinary for thumbnail uploads
+  return await uploadImageToCloudinary(file)
 }
 
 /**
