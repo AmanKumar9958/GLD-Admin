@@ -32,6 +32,7 @@ import {
   fetchCourseWithRelations,
   updateCourse,
   uploadThumbnail,
+  updateModuleOrder,
 } from '../../services/courseService'
 import { Progress } from '../../components/ui/progress'
 import { uploadVideoToBunny } from '../../services/bunnyService'
@@ -283,22 +284,206 @@ export const CourseForm = () => {
               )}
               <Accordion type="single" collapsible className="w-full space-y-2">
                 {modules.map((module) => (
-                  <AccordionItem key={module.id} value={module.id}>
-                    <AccordionTrigger>{module.title}</AccordionTrigger>
-                    <AccordionContent>
-                      <ModuleVideos
-                        module={module}
-                        courseId={id}
-                        onVideoCreated={refreshModules}
-                      />
-                    </AccordionContent>
-                  </AccordionItem>
+                  <ChapterItem
+                    key={module.id}
+                    chapter={module}
+                    courseId={id}
+                    onRefresh={refreshModules}
+                  />
                 ))}
               </Accordion>
             </>
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+const ChapterItem = ({ chapter, courseId, onRefresh }) => {
+  const [subModuleTitle, setSubModuleTitle] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  const handleAddSubModule = async () => {
+    if (!subModuleTitle || !courseId) return
+    setAdding(true)
+    try {
+      await createModule(courseId, {
+        title: subModuleTitle,
+        parentId: chapter.id,
+        orderIndex: (chapter.subModules || []).length + 1
+      })
+      setSubModuleTitle('')
+      onRefresh()
+    } catch (err) {
+      console.error('Failed to add sub-module:', err)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const handleMoveSubModule = async (subModuleId, direction) => {
+    const siblings = [...(chapter.subModules || [])]
+    const index = siblings.findIndex(s => s.id === subModuleId)
+    if (index === -1) return
+
+    if (direction === 'up' && index === 0) return
+    if (direction === 'down' && index === siblings.length - 1) return
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    const current = siblings[index]
+    const target = siblings[targetIndex]
+
+    try {
+      const currentNewOrder = target.order_index || (targetIndex + 1)
+      const targetNewOrder = current.order_index || (index + 1)
+
+      const finalCurrentNewOrder = currentNewOrder === targetNewOrder 
+        ? (direction === 'up' ? currentNewOrder - 1 : currentNewOrder + 1) 
+        : currentNewOrder;
+
+      await Promise.all([
+        updateModuleOrder(current.id, finalCurrentNewOrder),
+        updateModuleOrder(target.id, targetNewOrder)
+      ])
+
+      onRefresh()
+    } catch (err) {
+      console.error('Failed to move sub-module:', err)
+    }
+  }
+
+  return (
+    <AccordionItem key={chapter.id} value={chapter.id}>
+      <AccordionTrigger className="text-base font-semibold text-gray-900 hover:no-underline">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
+            C
+          </span>
+          {chapter.title}
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="space-y-4 pt-2">
+        {/* Sub-module Creator */}
+        <div className="flex flex-col gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 p-3 md:flex-row md:items-end">
+          <div className="flex-1 space-y-1">
+            <Label htmlFor={`subModuleTitle-${chapter.id}`} className="text-xs text-gray-500">New Sub-Module / Exercise Title</Label>
+            <Input
+              id={`subModuleTitle-${chapter.id}`}
+              placeholder="e.g. Exercise 1.1"
+              value={subModuleTitle}
+              onChange={(e) => setSubModuleTitle(e.target.value)}
+              className="bg-white"
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="md:w-36"
+            disabled={adding || !subModuleTitle}
+            onClick={handleAddSubModule}
+          >
+            {adding ? 'Adding...' : 'Add Sub-Module'}
+          </Button>
+        </div>
+
+        {/* Sub-modules List */}
+        <div className="space-y-3 pl-2">
+          {(!chapter.subModules || chapter.subModules.length === 0) ? (
+            <p className="text-xs text-gray-500 italic">No sub-modules added yet. Add a sub-module to start uploading videos.</p>
+          ) : (
+            chapter.subModules.map((subModule, index) => (
+              <SubModuleItem
+                key={subModule.id}
+                subModule={subModule}
+                courseId={courseId}
+                onRefresh={onRefresh}
+                onMove={handleMoveSubModule}
+                isFirst={index === 0}
+                isLast={index === chapter.subModules.length - 1}
+              />
+            ))
+          )}
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  )
+}
+
+const SubModuleItem = ({ subModule, courseId, onRefresh, onMove, isFirst, isLast }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  return (
+    <div className="rounded-lg border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between p-3 bg-gray-50/50 border-b border-gray-100">
+        <div 
+          className="flex flex-1 items-center gap-2 cursor-pointer select-none"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {/* Collapse/Expand Arrow Icon */}
+          <span className="text-gray-400 hover:text-gray-600 transition-transform duration-200">
+            <svg 
+              className={`h-4 w-4 transform transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 text-[10px] font-bold text-indigo-600 shadow-sm">
+            E
+          </span>
+          <span className="font-semibold text-gray-800 text-sm">
+            {subModule.title}
+          </span>
+          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-medium">
+            {subModule.videos?.length || 0} Video{(subModule.videos?.length === 1) ? "" : "s"}
+          </span>
+        </div>
+
+        {/* Up / Down Order controls */}
+        <div className="flex items-center gap-1 pl-2 border-l border-gray-100">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-md hover:bg-gray-200"
+            disabled={isFirst}
+            onClick={() => onMove(subModule.id, 'up')}
+            title="Move Up"
+          >
+            <svg className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-md hover:bg-gray-200"
+            disabled={isLast}
+            onClick={() => onMove(subModule.id, 'down')}
+            title="Move Down"
+          >
+            <svg className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </Button>
+        </div>
+      </div>
+
+      {/* Collapsible Content */}
+      {isExpanded && (
+        <div className="p-3 bg-white border-t border-gray-50 animate-in fade-in slide-in-from-top-1 duration-200">
+          <ModuleVideos
+            module={subModule}
+            courseId={courseId}
+            onVideoCreated={onRefresh}
+          />
+        </div>
+      )}
     </div>
   )
 }

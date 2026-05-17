@@ -35,12 +35,28 @@ export async function fetchCourseWithRelations(courseId) {
 
   if (modulesError) throw modulesError
 
+  const parentModules = modules.filter(m => !m.parent_id)
+  const subModules = modules.filter(m => m.parent_id)
+
+  const parentModulesWithChildren = parentModules.map(parent => {
+    const children = subModules
+      .filter(child => child.parent_id === parent.id)
+      .map(child => ({
+        ...child,
+        videos: (child.videos || []).sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+      }))
+      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+
+    return {
+      ...parent,
+      subModules: children,
+      videos: (parent.videos || []).sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+    }
+  }).sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+
   return {
     ...course,
-    modules: modules.map(m => ({
-      ...m,
-      videos: (m.videos || []).sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
-    }))
+    modules: parentModulesWithChildren
   }
 }
 
@@ -112,7 +128,8 @@ export async function createModule(courseId, payload) {
     .insert([{
       course_id: courseId,
       title: payload.title,
-      order_index: Number(payload.orderIndex) || 0
+      order_index: Number(payload.orderIndex) || 0,
+      parent_id: payload.parentId || null
     }])
     .select()
     .single()
@@ -120,6 +137,16 @@ export async function createModule(courseId, payload) {
   if (error) throw error
   return data.id
 }
+
+export async function updateModuleOrder(moduleId, newOrderIndex) {
+  const { error } = await supabase
+    .from('modules')
+    .update({ order_index: Number(newOrderIndex) })
+    .eq('id', moduleId)
+
+  if (error) throw error
+}
+
 
 /**
  * VIDEOS
