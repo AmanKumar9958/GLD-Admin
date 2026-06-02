@@ -159,13 +159,23 @@ export async function createVideo(moduleId, payload) {
       title: payload.title,
       duration: Number(payload.duration) || 0,
       is_preview: !!payload.isPreview,
-      bunny_video_id: payload.bunnyVideoId
+      bunny_video_id: payload.bunnyVideoId,
+      description: payload.description || null
     }])
     .select()
     .single()
 
   if (error) throw error
   return data.id
+}
+
+export async function updateVideoDescription(videoId, description) {
+  const { error } = await supabase
+    .from('videos')
+    .update({ description: description || null })
+    .eq('id', videoId)
+
+  if (error) throw error
 }
 
 /**

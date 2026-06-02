@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CheckCircle2, XCircle, Loader2, ChevronUp, ChevronDown, X } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, ChevronUp, ChevronDown, X, Pencil, Check } from 'lucide-react'
 import { uploadStore, useUploads } from '../../store/uploadStore'
 import {
   Accordion,
@@ -35,6 +35,7 @@ import {
   updateCourse,
   uploadThumbnail,
   updateModuleOrder,
+  updateVideoDescription,
 } from '../../services/courseService'
 import { Progress } from '../../components/ui/progress'
 import { uploadVideoToBunny } from '../../services/bunnyService'
@@ -580,6 +581,7 @@ const SubModuleItem = ({ subModule, courseId, onRefresh, onMove, isFirst, isLast
 const videoSchema = z.object({
   title: z.string().min(2, 'Title is required'),
   duration: z.coerce.number().positive('Duration must be positive'),
+  description: z.string().optional(),
   isPreview: z.boolean().optional(),
   file: z.any().optional(),
 })
@@ -592,6 +594,7 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
     defaultValues: {
       title: '',
       duration: '',
+      description: '',
       isPreview: false,
       file: undefined,
     },
@@ -662,6 +665,15 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
                   <p className="text-sm text-red-600">{form.formState.errors.duration.message}</p>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="videoDescription">Description</Label>
+                <textarea
+                  id="videoDescription"
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+                  placeholder="Brief description of the video content..."
+                  {...form.register('description')}
+                />
+              </div>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="isPreview"
@@ -702,23 +714,124 @@ const ModuleVideos = ({ module, courseId, onVideoCreated }) => {
         {/* Render completed videos */}
         {module.videos?.length ? (
           module.videos.map((video) => (
-            <div
-              key={video.id}
-              className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-sm shadow-sm border border-gray-100"
-            >
-              <div>
-                <p className="font-medium">{video.title}</p>
-                <p className="text-xs text-gray-500">
-                  {video.duration} min • {video.is_preview ? 'Preview' : 'Full'}
-                </p>
-              </div>
-              <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                {video.bunny_video_id}
-              </span>
-            </div>
+            <VideoItem key={video.id} video={video} onDescriptionSaved={onVideoCreated} />
           ))
         ) : (
           <p className="text-sm text-gray-600">No videos yet.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const VideoItem = ({ video, onDescriptionSaved }) => {
+  const [isEditing, setIsEditing] = useState(false)
+  const [description, setDescription] = useState(video.description || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  // Sync local description when video prop updates (e.g. after parent refresh)
+  useEffect(() => {
+    setDescription(video.description || '')
+  }, [video.description])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      await updateVideoDescription(video.id, description)
+      setIsEditing(false)
+      onDescriptionSaved?.()
+    } catch (err) {
+      console.error('Failed to save description:', err)
+      setError(err.message || 'Failed to save description')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCancel = () => {
+    setDescription(video.description || '')
+    setIsEditing(false)
+    setError('')
+  }
+
+  return (
+    <div className="rounded-md bg-white px-3 py-2 text-sm shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium">{video.title}</p>
+          <p className="text-xs text-gray-500">
+            {video.duration} min • {video.is_preview ? 'Preview' : 'Full'}
+          </p>
+        </div>
+        <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700">
+          {video.bunny_video_id}
+        </span>
+      </div>
+
+      {/* Description Section */}
+      <div className="mt-2 pt-2 border-t border-gray-50">
+        {isEditing ? (
+          <div className="space-y-2">
+            <textarea
+              className="flex min-h-[60px] w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+              placeholder="Add a description for this video..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              autoFocus
+            />
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <div className="flex items-center gap-2 justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleCancel}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3" />
+                )}
+                Save
+              </Button>
+            </div>
+          </div>
+        ) : description ? (
+          <div
+            className="group flex items-start gap-2 cursor-pointer rounded-md bg-gray-50 border border-gray-100 px-3 py-2 hover:border-blue-200 hover:bg-blue-50/30 transition-all"
+            onClick={() => setIsEditing(true)}
+          >
+            <p className="text-xs text-gray-600 flex-1 whitespace-pre-wrap leading-relaxed">{description}</p>
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-md bg-white border border-gray-200 px-2 py-1 text-xs text-gray-500 hover:text-blue-600 hover:border-blue-300 transition-colors flex-shrink-0 shadow-sm"
+            >
+              <Pencil className="h-3 w-3" />
+              Edit
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="w-full flex items-center justify-center gap-2 rounded-md border-2 border-dashed border-blue-200 bg-blue-50/40 px-3 py-2.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-all cursor-pointer"
+            onClick={() => setIsEditing(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Add Description
+          </button>
         )}
       </div>
     </div>
