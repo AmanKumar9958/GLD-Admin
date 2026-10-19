@@ -8,6 +8,10 @@ import { Settings } from './pages/Settings'
 import { Students } from './pages/Students'
 import { CourseForm } from './pages/courses/CourseForm'
 import { CourseList } from './pages/courses/CourseList'
+import { TestList } from './pages/tests/TestList'
+import { TestForm } from './pages/tests/TestForm'
+import { QuestionManager } from './pages/tests/QuestionManager'
+import { TestAttempts } from './pages/tests/TestAttempts'
 
 const App = () => {
   return (
@@ -27,6 +31,11 @@ const App = () => {
             <Route path="courses" element={<CourseList />} />
             <Route path="courses/new" element={<CourseForm />} />
             <Route path="courses/:id" element={<CourseForm />} />
+            <Route path="tests" element={<TestList />} />
+            <Route path="tests/new" element={<TestForm />} />
+            <Route path="tests/:id/edit" element={<TestForm />} />
+            <Route path="tests/:id/questions" element={<QuestionManager />} />
+            <Route path="tests/:id/attempts" element={<TestAttempts />} />
             <Route path="students" element={<Students />} />
             <Route path="settings" element={<Settings />} />
           </Route>
