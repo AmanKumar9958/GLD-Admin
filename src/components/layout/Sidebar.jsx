@@ -1,10 +1,11 @@
-import { BookOpen, Home, Settings, Users } from 'lucide-react'
+import { BookOpen, Home, Settings, Users, ClipboardList } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '../../lib/utils'
 
 const links = [
   { to: '/', label: 'Dashboard', icon: Home },
   { to: '/courses', label: 'Courses', icon: BookOpen },
+  { to: '/tests', label: 'Tests', icon: ClipboardList },
   { to: '/students', label: 'Students', icon: Users },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
