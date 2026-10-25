@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -10,44 +10,83 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const userRef = useRef(null)
+
+  // Keep userRef in sync with state for event listeners
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
 
   useEffect(() => {
     let isMounted = true
 
-    const fetchRoleAndSetUser = async (currentSession) => {
+    const fetchRoleAndSetUser = async (currentSession, isInitial = false) => {
       if (!currentSession?.user) {
         if (isMounted) {
           setSession(null)
           setUser(null)
+          if (isInitial) setLoading(false)
+        }
+        return
+      }
+
+      try {
+        // Fetch the role from the users table
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', currentSession.user.id)
+          .single()
+
+        if (isMounted) {
+          setSession(currentSession)
+          // Attach the role to the user object
+          setUser({ ...currentSession.user, role: userData?.role })
+        }
+      } catch (err) {
+        console.error('Error fetching user role:', err)
+      } finally {
+        if (isMounted && isInitial) {
+          setLoading(false)
+        }
+      }
+    }
+
+    // 1. Initial Session Check on app startup
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      fetchRoleAndSetUser(session, true)
+    }).catch(() => {
+      if (isMounted) setLoading(false)
+    })
+
+    // 2. Listen for auth changes (token refresh, sign in, sign out)
+    // NOTE: NEVER call setLoading(true) on tab switch / background token refresh!
+    // That was causing the whole app to unmount and wiping all user typed form inputs.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (event === 'SIGNED_OUT') {
+        if (isMounted) {
+          setUser(null)
+          setSession(null)
           setLoading(false)
         }
         return
       }
 
-      // Fetch the role from the users table
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', currentSession.user.id)
-        .single()
-
-      if (isMounted) {
-        setSession(currentSession)
-        // Attach the role to the user object
-        setUser({ ...currentSession.user, role: userData?.role })
-        setLoading(false)
+      if (event === 'TOKEN_REFRESHED') {
+        // Silently update session in background without unmounting pages
+        if (isMounted && newSession) {
+          setSession(newSession)
+        }
+        return
       }
-    }
 
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      fetchRoleAndSetUser(session)
-    })
-
-    // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setLoading(true)
-      fetchRoleAndSetUser(session)
+      // If user is already authenticated, update silently in the background
+      if (userRef.current) {
+        fetchRoleAndSetUser(newSession, false)
+      } else {
+        // Only trigger loading state if we don't have a user yet
+        fetchRoleAndSetUser(newSession, true)
+      }
     })
 
     return () => {
@@ -90,7 +129,6 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-
   const logout = async () => {
     await supabase.auth.signOut()
     setUser(null)
@@ -126,8 +164,12 @@ export const ProtectedRoute = ({ children }) => {
   const location = useLocation()
 
   if (loading) {
-    // Show a blank screen or spinner while verifying role
-    return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>Loading...</div> 
+    // Show a loading screen only during initial app launch
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
+        Loading...
+      </div>
+    )
   }
 
   // Reject unauthenticated users OR users who are not admins
