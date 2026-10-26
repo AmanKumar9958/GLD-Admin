@@ -64,6 +64,18 @@ export const QuestionManager = () => {
   const [showCustomSectionModal, setShowCustomSectionModal] = useState(false)
 
   // 1. Load Test and Questions
+  // Warn user before leaving if unsaved changes exist
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
   useEffect(() => {
     async function load() {
       if (!id) return
