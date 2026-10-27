@@ -11,20 +11,31 @@ import {
   HelpCircle,
   Save,
   ChevronRight,
+  Plus,
+  FolderPlus,
+  Check,
 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
-import { Checkbox } from '../../components/ui/checkbox'
 import { Spinner } from '../../components/ui/spinner'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog'
 import {
   createTest,
   updateTest,
   fetchTestWithQuestions,
+  fetchCategories,
+  addCategory,
+  DEFAULT_CATEGORIES,
 } from '../../services/testAdminService'
-
-const CATEGORIES = ['SSC', 'Banking', 'Railways', 'State Exams', 'General', 'Academics']
 
 const PRESETS = [
   {
@@ -68,6 +79,12 @@ export const TestForm = () => {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Categories list
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [categorySuccessMsg, setCategorySuccessMsg] = useState('')
+
   // Form State
   const [formData, setFormData] = useState({
     title: '',
@@ -82,33 +99,65 @@ export const TestForm = () => {
     is_published: true,
   })
 
-  // Load existing test if editing
+  // Load Categories & Test
   useEffect(() => {
-    async function loadTest() {
-      if (!id) return
+    async function init() {
       try {
-        setIsLoading(true)
-        const data = await fetchTestWithQuestions(id)
-        setFormData({
-          title: data.title || '',
-          description: data.description || '',
-          category: data.category || 'SSC',
-          duration_minutes: data.duration_minutes || 60,
-          total_marks: data.total_marks || 100,
-          positive_marks: data.positive_marks || 1,
-          negative_marks: data.negative_marks || 0.25,
-          is_free: data.is_free !== false,
-          price: data.price || 0,
-          is_published: data.is_published !== false,
-        })
+        const catList = await fetchCategories()
+        setCategories(catList)
+
+        if (id) {
+          setIsLoading(true)
+          const data = await fetchTestWithQuestions(id)
+          setFormData({
+            title: data.title || '',
+            description: data.description || '',
+            category: data.category || 'SSC',
+            duration_minutes: data.duration_minutes || 60,
+            total_marks: data.total_marks || 100,
+            positive_marks: data.positive_marks || 1,
+            negative_marks: data.negative_marks || 0.25,
+            is_free: data.is_free !== false,
+            price: data.price || 0,
+            is_published: data.is_published !== false,
+          })
+
+          // Ensure loaded category is in category list
+          if (data.category && !catList.includes(data.category)) {
+            setCategories((prev) => [...prev, data.category])
+          }
+        }
       } catch (err) {
         setError(err.message || 'Failed to load test details')
       } finally {
         setIsLoading(false)
       }
     }
-    loadTest()
+    init()
   }, [id])
+
+  // Handle adding a new category
+  const handleAddNewCategory = (e) => {
+    e?.preventDefault()
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return
+
+    addCategory(trimmed)
+
+    setCategories((prev) => {
+      if (!prev.includes(trimmed)) return [...prev, trimmed]
+      return prev
+    })
+
+    // Automatically select the new category for this test
+    setFormData((prev) => ({ ...prev, category: trimmed }))
+    setNewCategoryName('')
+    setShowNewCategoryModal(false)
+
+    // Show quick feedback
+    setCategorySuccessMsg(`Category "${trimmed}" created & selected!`)
+    setTimeout(() => setCategorySuccessMsg(''), 4000)
+  }
 
   // Apply a preset
   const handleApplyPreset = (preset) => {
@@ -214,6 +263,13 @@ export const TestForm = () => {
         </div>
       ) : null}
 
+      {categorySuccessMsg ? (
+        <div className="flex items-center gap-2 rounded-md bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 animate-fadeIn">
+          <Check className="h-4 w-4 text-emerald-600" />
+          <span>{categorySuccessMsg}</span>
+        </div>
+      ) : null}
+
       {/* QUICK PRESETS BANNER (Only when creating new test) */}
       {!isEditing && (
         <Card className="border-indigo-100 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-blue-50/70">
@@ -274,24 +330,57 @@ export const TestForm = () => {
             />
           </div>
 
-          {/* Category */}
+          {/* Category & New Category Action */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="category" className="text-xs font-semibold text-gray-700">
-                Exam Category
-              </Label>
-              <select
-                id="category"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
+              <div className="flex items-center justify-between">
+                <Label htmlFor="category" className="text-xs font-semibold text-gray-700">
+                  Exam Category
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => setShowNewCategoryModal(true)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>New Category</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 mt-1">
+                <select
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_new__') {
+                      setShowNewCategoryModal(true)
+                    } else {
+                      setFormData({ ...formData, category: e.target.value })
+                    }
+                  }}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                  <option value="__add_new__" className="text-blue-600 font-semibold">
+                    + Add New Category...
                   </option>
-                ))}
-              </select>
+                </select>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowNewCategoryModal(true)}
+                  className="px-2.5 h-9 shrink-0 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                  title="Create New Category"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Description */}
@@ -488,6 +577,58 @@ export const TestForm = () => {
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* NEW CATEGORY MODAL */}
+      <Dialog open={showNewCategoryModal} onOpenChange={setShowNewCategoryModal}>
+        <DialogContent className="max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-gray-900 font-bold">
+              <FolderPlus className="h-5 w-5 text-blue-600" />
+              <span>Create New Exam Category</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-500">
+              Add a new category (e.g. UPSC, Defence / CDS, Teaching, GATE). It will be available for all future tests and in the mobile app.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAddNewCategory} className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="newCategoryInput" className="text-xs font-semibold text-gray-700">
+                Category Name
+              </Label>
+              <Input
+                id="newCategoryInput"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="e.g. Defence / NDA, UPSC, Teaching"
+                autoFocus
+                className="mt-1"
+              />
+            </div>
+
+            <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowNewCategoryModal(false)
+                  setNewCategoryName('')
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!newCategoryName.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Category
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

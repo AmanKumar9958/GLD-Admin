@@ -18,10 +18,22 @@ import {
   ToggleLeft,
   ToggleRight,
   TrendingUp,
+  FolderPlus,
+  Check,
 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Spinner } from '../../components/ui/spinner'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -35,9 +47,10 @@ import {
   deleteTest,
   toggleTestPublish,
   createTest,
+  fetchCategories,
+  addCategory,
+  DEFAULT_CATEGORIES,
 } from '../../services/testAdminService'
-
-const CATEGORIES = ['All', 'SSC', 'Banking', 'Railways', 'State Exams', 'General']
 
 const QUICK_PRESETS = [
   {
@@ -85,14 +98,23 @@ export const TestList = () => {
   const [error, setError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
+  const [categories, setCategories] = useState(['All', ...DEFAULT_CATEGORIES])
   const [showPresetMenu, setShowPresetMenu] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
 
-  const loadTests = async () => {
+  // New Category Modal
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+
+  const loadData = async () => {
     try {
       setLoading(true)
-      const data = await fetchAdminTests()
-      setTests(data)
+      const [testsData, catData] = await Promise.all([
+        fetchAdminTests(),
+        fetchCategories(),
+      ])
+      setTests(testsData)
+      setCategories(['All', ...catData])
     } catch (err) {
       setError(err.message || 'Failed to load mock tests')
     } finally {
@@ -101,8 +123,25 @@ export const TestList = () => {
   }
 
   useEffect(() => {
-    loadTests()
+    loadData()
   }, [])
+
+  const handleAddNewCategory = (e) => {
+    e?.preventDefault()
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return
+
+    addCategory(trimmed)
+
+    setCategories((prev) => {
+      if (!prev.includes(trimmed)) return [...prev, trimmed]
+      return prev
+    })
+
+    setSelectedCategory(trimmed)
+    setNewCategoryName('')
+    setShowNewCategoryModal(false)
+  }
 
   const handleDelete = async (testId, testTitle) => {
     const confirmDelete = window.confirm(
@@ -272,9 +311,9 @@ export const TestList = () => {
       {/* Filter & Search Bar */}
       <Card className="border-gray-200">
         <CardHeader className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          {/* Category Pills */}
+          {/* Category Pills + New Category Button */}
           <div className="flex flex-wrap items-center gap-2">
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
@@ -287,6 +326,15 @@ export const TestList = () => {
                 {cat}
               </button>
             ))}
+
+            <button
+              onClick={() => setShowNewCategoryModal(true)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+              title="Add New Category"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>New Category</span>
+            </button>
           </div>
 
           {/* Search Box */}
@@ -482,6 +530,58 @@ export const TestList = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* NEW CATEGORY MODAL */}
+      <Dialog open={showNewCategoryModal} onOpenChange={setShowNewCategoryModal}>
+        <DialogContent className="max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-gray-900 font-bold">
+              <FolderPlus className="h-5 w-5 text-blue-600" />
+              <span>Create New Exam Category</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-500">
+              Add a new category (e.g. UPSC, Defence, Teaching, State Police). It will appear in category filters and test forms.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAddNewCategory} className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="categoryNameInput" className="text-xs font-semibold text-gray-700">
+                Category Name
+              </Label>
+              <Input
+                id="categoryNameInput"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="e.g. Defence / NDA, UPSC, Teaching"
+                autoFocus
+                className="mt-1"
+              />
+            </div>
+
+            <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowNewCategoryModal(false)
+                  setNewCategoryName('')
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!newCategoryName.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Category
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
