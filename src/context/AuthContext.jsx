@@ -4,28 +4,59 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
+const CACHED_USER_KEY = 'gld_admin_user'
+
+function getInitialUser() {
+  try {
+    const raw = localStorage.getItem(CACHED_USER_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.role === 'admin') {
+        return parsed
+      }
+    }
+  } catch (e) {
+    console.error('Error reading cached admin user:', e)
+  }
+  return null
+}
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
+  const initialUser = useMemo(() => getInitialUser(), [])
+  const [user, setUser] = useState(initialUser)
   const [session, setSession] = useState(null)
-  const [loading, setLoading] = useState(true)
+  // If we already have a cached admin user, do not show full-page loading
+  const [loading, setLoading] = useState(!initialUser)
   const [error, setError] = useState(null)
-  const userRef = useRef(null)
+  const userRef = useRef(initialUser)
 
   // Keep userRef in sync with state for event listeners
   useEffect(() => {
     userRef.current = user
+    if (user && user.role === 'admin') {
+      try {
+        localStorage.setItem(CACHED_USER_KEY, JSON.stringify(user))
+      } catch (e) {}
+    } else if (!user) {
+      try {
+        localStorage.removeItem(CACHED_USER_KEY)
+      } catch (e) {}
+    }
   }, [user])
 
   useEffect(() => {
     let isMounted = true
 
-    const fetchRoleAndSetUser = async (currentSession, isInitial = false) => {
+    const syncSession = async (currentSession) => {
       if (!currentSession?.user) {
+        return
+      }
+
+      // If user is already authenticated as admin, keep session in sync without re-fetching role
+      if (userRef.current?.role === 'admin' && userRef.current.id === currentSession.user.id) {
         if (isMounted) {
-          setSession(null)
-          setUser(null)
-          if (isInitial) setLoading(false)
+          setSession(currentSession)
+          setLoading(false)
         }
         return
       }
@@ -39,53 +70,70 @@ export const AuthProvider = ({ children }) => {
           .single()
 
         if (isMounted) {
-          setSession(currentSession)
-          // Attach the role to the user object
-          setUser({ ...currentSession.user, role: userData?.role })
+          if (userData?.role === 'admin') {
+            const adminUser = { ...currentSession.user, role: 'admin' }
+            setUser(adminUser)
+            setSession(currentSession)
+          } else {
+            setUser(null)
+            setSession(null)
+            try {
+              localStorage.removeItem(CACHED_USER_KEY)
+            } catch (e) {}
+          }
         }
       } catch (err) {
         console.error('Error fetching user role:', err)
       } finally {
-        if (isMounted && isInitial) {
+        if (isMounted) {
           setLoading(false)
         }
       }
     }
 
     // 1. Initial Session Check on app startup
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      fetchRoleAndSetUser(session, true)
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (s) {
+        syncSession(s)
+      } else {
+        if (isMounted) {
+          // No active session in supabase storage
+          setUser(null)
+          setSession(null)
+          setLoading(false)
+          try {
+            localStorage.removeItem(CACHED_USER_KEY)
+          } catch (e) {}
+        }
+      }
     }).catch(() => {
       if (isMounted) setLoading(false)
     })
 
-    // 2. Listen for auth changes (token refresh, sign in, sign out)
-    // NOTE: NEVER call setLoading(true) on tab switch / background token refresh!
-    // That was causing the whole app to unmount and wiping all user typed form inputs.
+    // 2. Listen for auth changes (token refresh, tab refocus, sign out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (event === 'SIGNED_OUT') {
         if (isMounted) {
           setUser(null)
           setSession(null)
           setLoading(false)
+          try {
+            localStorage.removeItem(CACHED_USER_KEY)
+          } catch (e) {}
         }
         return
       }
 
       if (event === 'TOKEN_REFRESHED') {
-        // Silently update session in background without unmounting pages
         if (isMounted && newSession) {
           setSession(newSession)
         }
         return
       }
 
-      // If user is already authenticated, update silently in the background
-      if (userRef.current) {
-        fetchRoleAndSetUser(newSession, false)
-      } else {
-        // Only trigger loading state if we don't have a user yet
-        fetchRoleAndSetUser(newSession, true)
+      // On tab focus or sign in, sync quietly without unmounting
+      if (newSession) {
+        syncSession(newSession)
       }
     })
 
@@ -118,8 +166,12 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Unauthorized: Admin access required')
       }
 
-      setUser({ ...data.user, role: userData.role })
+      const adminUser = { ...data.user, role: userData.role }
+      setUser(adminUser)
       setSession(data.session)
+      try {
+        localStorage.setItem(CACHED_USER_KEY, JSON.stringify(adminUser))
+      } catch (e) {}
       return { success: true }
     } catch (err) {
       setError(err.message)
@@ -130,6 +182,9 @@ export const AuthProvider = ({ children }) => {
   }
 
   const logout = async () => {
+    try {
+      localStorage.removeItem(CACHED_USER_KEY)
+    } catch (e) {}
     await supabase.auth.signOut()
     setUser(null)
     setSession(null)
@@ -164,7 +219,6 @@ export const ProtectedRoute = ({ children }) => {
   const location = useLocation()
 
   if (loading) {
-    // Show a loading screen only during initial app launch
     return (
       <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
         Loading...

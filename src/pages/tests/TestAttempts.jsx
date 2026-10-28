@@ -118,11 +118,11 @@ export const TestAttempts = () => {
                 {test?.title || 'Test Submissions'}
               </h1>
               <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                Leaderboard & Attempts
+                Student Attempts & Scores
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              Review student scores, rank distributions, and accuracy breakdown.
+              Review student scores, marks, and question accuracy breakdown.
             </p>
           </div>
         </div>
@@ -227,9 +227,10 @@ export const TestAttempts = () => {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50">
-                    <TableHead className="w-16 font-semibold text-gray-700">Rank</TableHead>
                     <TableHead className="font-semibold text-gray-700">Student</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Score</TableHead>
+                    <TableHead className="font-semibold text-gray-700">Total Marks</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">Correct Qs</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">Incorrect Qs</TableHead>
                     <TableHead className="font-semibold text-gray-700">Accuracy</TableHead>
                     <TableHead className="font-semibold text-gray-700">Time Taken</TableHead>
                     <TableHead className="font-semibold text-gray-700">Submitted At</TableHead>
@@ -238,22 +239,6 @@ export const TestAttempts = () => {
                 <TableBody>
                   {filteredAttempts.map((item) => (
                     <TableRow key={item.id} className="hover:bg-gray-50/80">
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                            item.rank === 1
-                              ? 'bg-amber-100 text-amber-800'
-                              : item.rank === 2
-                              ? 'bg-slate-200 text-slate-800'
-                              : item.rank === 3
-                              ? 'bg-orange-100 text-orange-800'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          #{item.rank}
-                        </span>
-                      </TableCell>
-
                       <TableCell>
                         <div className="font-semibold text-sm text-gray-900">
                           {item.student_name}
@@ -265,7 +250,19 @@ export const TestAttempts = () => {
                         <span className="font-bold text-gray-900 text-sm">
                           {item.score}
                         </span>
-                        <span className="text-xs text-gray-400">/{test?.total_marks}</span>
+                        <span className="text-xs text-gray-400">/{test?.total_marks || item.total_marks}</span>
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+                          +{item.correct_count ?? 0}
+                        </span>
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center rounded-md bg-rose-50 px-2.5 py-0.5 text-xs font-bold text-rose-700">
+                          -{item.incorrect_count ?? 0}
+                        </span>
                       </TableCell>
 
                       <TableCell>

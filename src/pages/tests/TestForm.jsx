@@ -99,6 +99,34 @@ export const TestForm = () => {
     is_published: true,
   })
 
+  // Auto-save & restore draft for new test creation
+  const TEST_FORM_DRAFT_KEY = 'gld_test_form_draft'
+
+  useEffect(() => {
+    if (!isEditing) {
+      try {
+        const savedDraft = localStorage.getItem(TEST_FORM_DRAFT_KEY)
+        if (savedDraft) {
+          const parsed = JSON.parse(savedDraft)
+          if (parsed && parsed.title) {
+            setFormData((prev) => ({ ...prev, ...parsed }))
+          }
+        }
+      } catch (e) {
+        console.error('Error restoring test draft:', e)
+      }
+    }
+  }, [isEditing])
+
+  useEffect(() => {
+    if (!isEditing && (formData.title || formData.description)) {
+      try {
+        localStorage.setItem(TEST_FORM_DRAFT_KEY, JSON.stringify(formData))
+      } catch (e) {}
+    }
+  }, [formData, isEditing])
+
+
   // Load Categories & Test
   useEffect(() => {
     async function init() {
@@ -188,6 +216,7 @@ export const TestForm = () => {
         savedTest = await updateTest(id, formData)
       } else {
         savedTest = await createTest(formData)
+        try { localStorage.removeItem(TEST_FORM_DRAFT_KEY) } catch (e) {}
       }
 
       if (proceedToQuestions) {

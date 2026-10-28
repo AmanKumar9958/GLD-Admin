@@ -63,6 +63,18 @@ export const QuestionManager = () => {
   const [customSectionInput, setCustomSectionInput] = useState('')
   const [showCustomSectionModal, setShowCustomSectionModal] = useState(false)
 
+  const getDraftKey = (testId) => 'gld_questions_draft_' + testId;
+
+  // Auto-save unsaved questions to localStorage whenever they change
+  useEffect(() => {
+    if (id && questions && questions.length > 0 && hasUnsavedChanges) {
+      try {
+        localStorage.setItem(getDraftKey(id), JSON.stringify(questions));
+      } catch (e) {}
+    }
+  }, [id, questions, hasUnsavedChanges]);
+
+
   // 1. Load Test and Questions
   // Warn user before leaving if unsaved changes exist
   useEffect(() => {
@@ -84,9 +96,24 @@ export const QuestionManager = () => {
         const data = await fetchTestWithQuestions(id)
         setTest(data)
 
-        if (data.questions && data.questions.length > 0) {
-          setQuestions(data.questions)
-        } else {
+        // Check if local draft exists
+        let draftFound = false;
+        try {
+          const savedDraft = localStorage.getItem(getDraftKey(id));
+          if (savedDraft) {
+            const parsed = JSON.parse(savedDraft);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setQuestions(parsed);
+              setHasUnsavedChanges(true);
+              draftFound = true;
+            }
+          }
+        } catch (e) {}
+
+        if (!draftFound) {
+          if (data.questions && data.questions.length > 0) {
+            setQuestions(data.questions)
+          } else {
           // Add first blank question
           setQuestions([
             createNewQuestion(
@@ -96,6 +123,7 @@ export const QuestionManager = () => {
               DEFAULT_SECTIONS[0]
             ),
           ])
+        }
         }
       } catch (err) {
         console.error('Failed to load questions:', err)
@@ -239,6 +267,7 @@ export const QuestionManager = () => {
       setIsSaving(true)
       await saveTestQuestions(id, questions)
       setHasUnsavedChanges(false)
+        try { localStorage.removeItem(getDraftKey(id)); } catch (e) {}
       // Reload fresh state with generated IDs
       const reloaded = await fetchTestWithQuestions(id)
       setQuestions(reloaded.questions)
