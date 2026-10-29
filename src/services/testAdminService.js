@@ -316,3 +316,72 @@ export async function fetchTestDashboardStats() {
     recentAttempts: formattedRecent,
   }
 }
+
+
+export const DEFAULT_CATEGORIES = ['SSC', 'Banking', 'Railways', 'State Exams', 'General', 'Academics'];
+const CATEGORIES_STORAGE_KEY = 'gld_test_categories';
+
+/**
+ * Fetch all categories (defaults + unique from mock_tests in Supabase + custom stored)
+ */
+export async function fetchCategories() {
+  const set = new Set(DEFAULT_CATEGORIES);
+
+  // 1. Get from localStorage
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((c) => {
+            if (c && c.trim()) set.add(c.trim());
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error reading stored categories:', e);
+  }
+
+  // 2. Get distinct categories from mock_tests in Supabase
+  try {
+    const { data } = await supabase.from('mock_tests').select('category');
+    if (data) {
+      data.forEach((item) => {
+        if (item.category && item.category.trim()) {
+          set.add(item.category.trim());
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Error fetching categories from database:', e);
+  }
+
+  return Array.from(set);
+}
+
+/**
+ * Save a newly created category
+ */
+export function addCategory(categoryName) {
+  const trimmed = categoryName?.trim();
+  if (!trimmed) return null;
+
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      let current = [];
+      const stored = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+      if (stored) current = JSON.parse(stored) || [];
+
+      if (!current.includes(trimmed)) {
+        current.push(trimmed);
+        localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(current));
+      }
+    }
+  } catch (e) {
+    console.error('Error storing category:', e);
+  }
+
+  return trimmed;
+}
