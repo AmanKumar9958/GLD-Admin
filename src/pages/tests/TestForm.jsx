@@ -201,10 +201,52 @@ export const TestForm = () => {
     }))
   }
 
+  
+  // Simple number input handlers:
+  // - Allows backspacing completely to an empty box (no forced '0')
+  // - Strips stubborn leading zeroes if user types after '0' (e.g. '0' + '34' -> '34')
+  // - Preserves decimals for marks (e.g. '0.25')
+  const handleNumberChange = (field, isDecimal = false) => (e) => {
+    let val = e.target.value;
+    if (val === '') {
+      setFormData((prev) => ({ ...prev, [field]: '' }));
+      return;
+    }
+    if (/^0+[1-9]/.test(val)) {
+      val = val.replace(/^0+/, '');
+    }
+    setFormData((prev) => ({ ...prev, [field]: val }));
+  };
+
+  const handleNumberBlur = (field, fallbackDefault) => () => {
+    setFormData((prev) => {
+      const currentVal = prev[field];
+      if (currentVal === '' || currentVal === null || currentVal === undefined) {
+        return { ...prev, [field]: fallbackDefault };
+      }
+      return prev;
+    });
+  };
+
   const handleSubmit = async (proceedToQuestions = false) => {
     if (!formData.title.trim()) {
       alert('Please enter a test title')
       return
+    }
+
+    const duration = parseInt(formData.duration_minutes, 10) || 60
+    const totalMarks = Number(formData.total_marks) || 100
+    const posMarks = formData.positive_marks === '' ? 1 : Number(formData.positive_marks)
+    const negMarks = formData.negative_marks === '' ? 0.25 : Number(formData.negative_marks)
+    const testPrice = formData.is_free ? 0 : (Number(formData.price) || 0)
+
+    const payload = {
+      ...formData,
+      duration_minutes: duration,
+      total_marks: totalMarks,
+      positive_marks: isNaN(posMarks) ? 1 : posMarks,
+      negative_marks: isNaN(negMarks) ? 0.25 : negMarks,
+      price: isNaN(testPrice) ? 0 : testPrice,
     }
 
     try {
@@ -213,9 +255,9 @@ export const TestForm = () => {
 
       let savedTest
       if (isEditing) {
-        savedTest = await updateTest(id, formData)
+        savedTest = await updateTest(id, payload)
       } else {
-        savedTest = await createTest(formData)
+        savedTest = await createTest(payload)
         try { localStorage.removeItem(TEST_FORM_DRAFT_KEY) } catch (e) {}
       }
 
@@ -444,20 +486,17 @@ export const TestForm = () => {
               <Label htmlFor="duration" className="text-xs font-semibold text-gray-700">
                 Duration (Minutes) <span className="text-red-500">*</span>
               </Label>
-              <div className="relative mt-1">
-                <Input
-                  id="duration"
-                  type="number"
-                  min="1"
-                  max="360"
-                  value={formData.duration_minutes}
-                  onChange={(e) =>
-                    setFormData({ ...formData, duration_minutes: Number(e.target.value) })
-                  }
-                  className="pr-12"
-                />
-                <span className="absolute right-3 top-2 text-xs text-gray-400">Mins</span>
-              </div>
+              <Input
+                id="duration"
+                type="number"
+                min="1"
+                max="360"
+                value={formData.duration_minutes ?? ''}
+                onChange={handleNumberChange('duration_minutes')}
+                onBlur={handleNumberBlur('duration_minutes', 60)}
+                placeholder="60"
+                className="mt-1"
+              />
             </div>
 
             {/* Total Marks */}
@@ -469,10 +508,10 @@ export const TestForm = () => {
                 id="totalMarks"
                 type="number"
                 min="1"
-                value={formData.total_marks}
-                onChange={(e) =>
-                  setFormData({ ...formData, total_marks: Number(e.target.value) })
-                }
+                value={formData.total_marks ?? ''}
+                onChange={handleNumberChange('total_marks')}
+                onBlur={handleNumberBlur('total_marks', 100)}
+                placeholder="100"
                 className="mt-1"
               />
             </div>
@@ -485,14 +524,13 @@ export const TestForm = () => {
               <Input
                 id="posMarks"
                 type="number"
-                step="0.25"
+                step="any"
                 min="0"
-                value={formData.positive_marks}
-                onChange={(e) =>
-                  setFormData({ ...formData, positive_marks: Number(e.target.value) })
-                }
+                value={formData.positive_marks ?? ''}
+                onChange={handleNumberChange('positive_marks', true)}
+                onBlur={handleNumberBlur('positive_marks', 1)}
                 className="mt-1"
-                placeholder="e.g. 2.0"
+                placeholder="1"
               />
             </div>
 
@@ -504,14 +542,13 @@ export const TestForm = () => {
               <Input
                 id="negMarks"
                 type="number"
-                step="0.25"
+                step="any"
                 min="0"
-                value={formData.negative_marks}
-                onChange={(e) =>
-                  setFormData({ ...formData, negative_marks: Number(e.target.value) })
-                }
+                value={formData.negative_marks ?? ''}
+                onChange={handleNumberChange('negative_marks', true)}
+                onBlur={handleNumberBlur('negative_marks', 0.25)}
                 className="mt-1"
-                placeholder="e.g. 0.5"
+                placeholder="0.25"
               />
             </div>
           </div>
