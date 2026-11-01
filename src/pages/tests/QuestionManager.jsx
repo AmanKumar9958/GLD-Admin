@@ -614,8 +614,7 @@ export const QuestionManager = () => {
                     <Input
                       type="number"
                       step="0.25"
-                      value={currentQuestion.positive_marks ?? test?.positive_marks ?? 1}
-                      onChange={(e) => updateCurrentQuestion('positive_marks', e.target.value)}
+                      value={currentQuestion.positive_marks ?? ''} onChange={(e) => { let val = e.target.value; if (/^0+[1-9]/.test(val)) val = val.replace(/^0+/, ''); updateCurrentQuestion('positive_marks', val); }}
                       className="h-7 w-16 text-xs text-center"
                     />
                   </div>
@@ -624,8 +623,7 @@ export const QuestionManager = () => {
                     <Input
                       type="number"
                       step="0.25"
-                      value={currentQuestion.negative_marks ?? test?.negative_marks ?? 0.25}
-                      onChange={(e) => updateCurrentQuestion('negative_marks', e.target.value)}
+                      value={currentQuestion.negative_marks ?? ''} onChange={(e) => { let val = e.target.value; if (/^0+[1-9]/.test(val)) val = val.replace(/^0+/, ''); updateCurrentQuestion('negative_marks', val); }}
                       className="h-7 w-16 text-xs text-center"
                     />
                   </div>
