@@ -60,6 +60,7 @@ export const QuestionManager = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkText, setBulkText] = useState('')
+  const [customSections, setCustomSections] = useState([])
   const [customSectionInput, setCustomSectionInput] = useState('')
   const [showCustomSectionModal, setShowCustomSectionModal] = useState(false)
 
@@ -151,17 +152,36 @@ export const QuestionManager = () => {
 
   // Unique sections in current questions + defaults
   const availableSections = useMemo(() => {
-    const set = new Set([...DEFAULT_SECTIONS])
+    const set = new Set([...DEFAULT_SECTIONS, ...customSections])
     questions.forEach((q) => {
-      if (q.section_name) set.add(q.section_name)
+      if (q.section_name && q.section_name.trim()) set.add(q.section_name.trim())
     })
     return Array.from(set)
-  }, [questions])
+  }, [questions, customSections])
 
   // Current Question
   const currentQuestion = questions[selectedIndex] || questions[0]
 
   // Update current question field
+  
+  const handleAddCustomSection = (e) => {
+    e?.preventDefault()
+    const trimmed = customSectionInput.trim()
+    if (!trimmed) return
+
+    setCustomSections((prev) => {
+      if (!prev.includes(trimmed)) return [...prev, trimmed]
+      return prev
+    })
+
+    if (currentQuestion) {
+      updateCurrentQuestion('section_name', trimmed)
+    }
+
+    setCustomSectionInput('')
+    setShowCustomSectionModal(false)
+  }
+
   const updateCurrentQuestion = (field, value) => {
     setQuestions((prev) => {
       const updated = [...prev]
@@ -498,6 +518,16 @@ export const QuestionManager = () => {
             </button>
           )
         })}
+
+        <button
+          type="button"
+          onClick={() => setShowCustomSectionModal(true)}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold border border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-500 whitespace-nowrap transition-colors"
+          title="Create a new section"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>New Section</span>
+        </button>
       </div>
 
       {/* 3. MAIN WORKSPACE: Sidebar Navigator + Question Editor */}
@@ -594,17 +624,38 @@ export const QuestionManager = () => {
                   </span>
 
                   {/* Section Selector */}
-                  <select
-                    value={currentQuestion.section_name || DEFAULT_SECTIONS[0]}
-                    onChange={(e) => updateCurrentQuestion('section_name', e.target.value)}
-                    className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium focus:border-blue-500 focus:outline-none"
-                  >
-                    {availableSections.map((sec) => (
-                      <option key={sec} value={sec}>
-                        {sec}
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={currentQuestion.section_name || DEFAULT_SECTIONS[0]}
+                      onChange={(e) => {
+                        if (e.target.value === '__add_new__') {
+                          setShowCustomSectionModal(true)
+                        } else {
+                          updateCurrentQuestion('section_name', e.target.value)
+                        }
+                      }}
+                      className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium focus:border-blue-500 focus:outline-none"
+                    >
+                      {availableSections.map((sec) => (
+                        <option key={sec} value={sec}>
+                          {sec}
+                        </option>
+                      ))}
+                      <option value="__add_new__" className="font-semibold text-blue-600 bg-blue-50">
+                        + Other / Create New Section...
                       </option>
-                    ))}
-                  </select>
+                    </select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowCustomSectionModal(true)}
+                      className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-gray-300"
+                      title="Create Custom Section"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Marks per Question */}
@@ -901,6 +952,83 @@ Explanation: New Delhi is the official capital.
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* CUSTOM SECTION DIALOG */}
+      <Dialog open={showCustomSectionModal} onOpenChange={setShowCustomSectionModal}>
+        <DialogContent className="max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-gray-900 font-bold">
+              <Layers className="h-5 w-5 text-blue-600" />
+              <span>Create Custom Section</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-500">
+              Add your own custom section for this test (e.g. Computer Awareness, General Science, Hindi, Teaching Aptitude, Current Affairs).
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAddCustomSection} className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="customSectionInput" className="text-xs font-semibold text-gray-700">
+                Section Name
+              </Label>
+              <Input
+                id="customSectionInput"
+                value={customSectionInput}
+                onChange={(e) => setCustomSectionInput(e.target.value)}
+                placeholder="e.g. Computer Knowledge, Current Affairs, Hindi"
+                autoFocus
+                className="mt-1"
+              />
+            </div>
+
+            {/* Quick Suggestions */}
+            <div>
+              <Label className="text-[11px] text-gray-500 font-medium">Quick Suggestions:</Label>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {[
+                  'General Science',
+                  'Computer Knowledge',
+                  'Current Affairs',
+                  'General Hindi',
+                  'Basic Mathematics',
+                  'Teaching Aptitude',
+                ].map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    onClick={() => setCustomSectionInput(sug)}
+                    className="text-[11px] bg-gray-100 hover:bg-blue-50 hover:text-blue-700 px-2 py-0.5 rounded border border-gray-200 text-gray-700 transition-colors"
+                  >
+                    + {sug}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCustomSectionModal(false)
+                  setCustomSectionInput('')
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!customSectionInput.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add & Assign Section
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
