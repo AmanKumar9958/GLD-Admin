@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useModal } from '../../context/ModalContext'
 import {
   ArrowLeft,
   Sparkles,
@@ -72,6 +73,7 @@ const PRESETS = [
 
 export const TestForm = () => {
   const navigate = useNavigate()
+  const modal = useModal()
   const { id } = useParams()
   const isEditing = Boolean(id)
 
@@ -230,7 +232,7 @@ export const TestForm = () => {
 
   const handleSubmit = async (proceedToQuestions = false) => {
     if (!formData.title.trim()) {
-      alert('Please enter a test title')
+      await modal.alert({ title: 'Missing Title', message: 'Please enter a test title before saving.', variant: 'warning' })
       return
     }
 

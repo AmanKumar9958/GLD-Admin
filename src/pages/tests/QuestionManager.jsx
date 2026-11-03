@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useModal } from '../../context/ModalContext'
 import {
   ArrowLeft,
   Plus,
@@ -48,6 +49,7 @@ const DEFAULT_SECTIONS = [
 
 export const QuestionManager = () => {
   const navigate = useNavigate()
+  const modal = useModal()
   const { id } = useParams()
 
   const [test, setTest] = useState(null)
@@ -128,7 +130,7 @@ export const QuestionManager = () => {
         }
       } catch (err) {
         console.error('Failed to load questions:', err)
-        alert('Failed to load test questions: ' + err.message)
+        modal.alert({ title: 'Error Loading Questions', message: err.message || 'Failed to load test questions', variant: 'danger' })
       } finally {
         setIsLoading(false)
       }
@@ -232,12 +234,21 @@ export const QuestionManager = () => {
   }
 
   // Delete Question
-  const handleDeleteQuestion = (idxToDelete) => {
+  const handleDeleteQuestion = async (idxToDelete) => {
     if (questions.length <= 1) {
-      alert('A test must have at least one question.')
+      await modal.alert({
+        title: 'Cannot Delete Question',
+        message: 'A mock test must contain at least one question.',
+        variant: 'warning',
+      })
       return
     }
-    const confirmed = window.confirm(`Delete Question #${idxToDelete + 1}?`)
+    const confirmed = await modal.confirm({
+      title: `Delete Question #${idxToDelete + 1}?`,
+      message: 'Are you sure you want to delete this question? This action cannot be undone.',
+      confirmText: 'Delete Question',
+      variant: 'danger',
+    })
     if (!confirmed) return
 
     setQuestions((prev) => {
@@ -271,13 +282,13 @@ export const QuestionManager = () => {
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i]
       if (!q.question_text.trim()) {
-        alert(`Question #${i + 1} has empty question text. Please fill it before saving.`)
+        await modal.alert({ title: 'Missing Question Text', message: `Question #${i + 1} has empty question text. Please fill it before saving.`, variant: 'warning' })
         setSelectedIndex(i)
         return
       }
       const hasEmptyOpt = (q.options || []).some((opt) => !String(opt).trim())
       if (hasEmptyOpt) {
-        alert(`Question #${i + 1} has one or more empty options. Please fill all 4 options.`)
+        await modal.alert({ title: 'Incomplete Options', message: `Question #${i + 1} has one or more empty options. Please fill all 4 options.`, variant: 'warning' })
         setSelectedIndex(i)
         return
       }
@@ -285,22 +296,27 @@ export const QuestionManager = () => {
 
     try {
       setIsSaving(true)
-      await saveTestQuestions(id, questions)
+      const questionsToSave = questions.map((q) => ({
+        ...q,
+        positive_marks: test?.positive_marks ?? q.positive_marks ?? 1,
+        negative_marks: test?.negative_marks ?? q.negative_marks ?? 0.25,
+      }))
+      await saveTestQuestions(id, questionsToSave)
       setHasUnsavedChanges(false)
         try { localStorage.removeItem(getDraftKey(id)); } catch (e) {}
       // Reload fresh state with generated IDs
       const reloaded = await fetchTestWithQuestions(id)
       setQuestions(reloaded.questions)
-      alert('All questions successfully saved!')
+      await modal.alert({ title: 'Saved Successfully', message: 'All questions have been successfully saved to the database.', variant: 'success' })
     } catch (err) {
-      alert('Error saving questions: ' + err.message)
+      await modal.alert({ title: 'Save Failed', message: err.message || 'Error saving questions', variant: 'danger' })
     } finally {
       setIsSaving(false)
     }
   }
 
   // Bulk Import Parser
-  const handleParseBulk = () => {
+  const handleParseBulk = async () => {
     if (!bulkText.trim()) return
 
     try {
@@ -325,7 +341,7 @@ export const QuestionManager = () => {
           setHasUnsavedChanges(true)
           setShowBulkModal(false)
           setBulkText('')
-          alert(`Successfully imported ${formatted.length} questions!`)
+          await modal.alert({ title: 'Questions Imported', message: `Successfully imported ${formatted.length} questions!`, variant: 'success' })
           return
         }
       }
@@ -387,7 +403,7 @@ export const QuestionManager = () => {
       })
 
       if (parsedList.length === 0) {
-        alert('Could not detect questions format. Please ensure each question has question text, 4 options (A, B, C, D), and Answer.')
+        await modal.alert({ title: 'Invalid Format', message: 'Could not detect question format. Please ensure each question has question text, 4 options (A, B, C, D), and Answer.', variant: 'warning' })
         return
       }
 
@@ -395,9 +411,9 @@ export const QuestionManager = () => {
       setHasUnsavedChanges(true)
       setShowBulkModal(false)
       setBulkText('')
-      alert(`Successfully imported ${parsedList.length} questions!`)
+      await modal.alert({ title: 'Import Successful', message: `Successfully parsed and imported ${parsedList.length} questions!`, variant: 'success' })
     } catch (err) {
-      alert('Error parsing bulk import: ' + err.message)
+      await modal.alert({ title: 'Import Failed', message: err.message || 'Error parsing bulk import', variant: 'danger' })
     }
   }
 
@@ -428,9 +444,15 @@ export const QuestionManager = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
+            onClick={async () => {
               if (hasUnsavedChanges) {
-                const leave = window.confirm('You have unsaved changes. Leave without saving?')
+                const leave = await modal.confirm({
+                  title: 'Unsaved Changes',
+                  message: 'You have unsaved changes in this test. Are you sure you want to leave without saving?',
+                  confirmText: 'Leave Without Saving',
+                  cancelText: 'Stay Here',
+                  variant: 'warning',
+                })
                 if (!leave) return
               }
               navigate('/tests')
@@ -658,28 +680,8 @@ export const QuestionManager = () => {
                   </div>
                 </div>
 
-                {/* Marks per Question */}
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <Label className="text-xs text-gray-600">Marks (+):</Label>
-                    <Input
-                      type="number"
-                      step="0.25"
-                      value={currentQuestion.positive_marks ?? ''} onChange={(e) => { let val = e.target.value; if (/^0+[1-9]/.test(val)) val = val.replace(/^0+/, ''); updateCurrentQuestion('positive_marks', val); }}
-                      className="h-7 w-16 text-xs text-center"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Label className="text-xs text-gray-600">Neg (-):</Label>
-                    <Input
-                      type="number"
-                      step="0.25"
-                      value={currentQuestion.negative_marks ?? ''} onChange={(e) => { let val = e.target.value; if (/^0+[1-9]/.test(val)) val = val.replace(/^0+/, ''); updateCurrentQuestion('negative_marks', val); }}
-                      className="h-7 w-16 text-xs text-center"
-                    />
-                  </div>
-
-                  {/* Move Up/Down Controls */}
+                {/* Move Up/Down Controls */}
+                <div className="flex items-center gap-1.5">
                   <div className="flex items-center border border-gray-200 rounded-md bg-white">
                     <button
                       type="button"

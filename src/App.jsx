@@ -2,6 +2,7 @@ import React from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { AuthProvider, ProtectedRoute } from './context/AuthContext'
+import { ModalProvider } from './context/ModalContext'
 import { Dashboard } from './pages/Dashboard'
 import { Login } from './pages/Login'
 import { Settings } from './pages/Settings'
@@ -16,7 +17,8 @@ import { TestAttempts } from './pages/tests/TestAttempts'
 const App = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <ModalProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
@@ -41,6 +43,7 @@ const App = () => {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ModalProvider>
     </AuthProvider>
   )
 }

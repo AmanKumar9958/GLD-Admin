@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useModal } from '../../context/ModalContext'
 import {
   FileText,
   Plus,
@@ -93,6 +94,7 @@ const QUICK_PRESETS = [
 
 export const TestList = () => {
   const navigate = useNavigate()
+  const modal = useModal()
   const [tests, setTests] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -144,16 +146,19 @@ export const TestList = () => {
   }
 
   const handleDelete = async (testId, testTitle) => {
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete "${testTitle}"?\nAll associated questions and student attempts will also be permanently deleted.`
-    )
+    const confirmDelete = await modal.confirm({
+      title: 'Delete Mock Test?',
+      message: `Are you sure you want to delete "${testTitle}"?\nAll associated questions and student attempts will be permanently deleted.`,
+      confirmText: 'Delete Test',
+      variant: 'danger',
+    })
     if (!confirmDelete) return
 
     try {
       await deleteTest(testId)
       setTests((prev) => prev.filter((t) => t.id !== testId))
     } catch (err) {
-      alert(err.message || 'Failed to delete test')
+      await modal.alert({ title: 'Delete Failed', message: err.message || 'Failed to delete test', variant: 'danger' })
     }
   }
 
@@ -164,7 +169,7 @@ export const TestList = () => {
         prev.map((t) => (t.id === test.id ? { ...t, is_published: updated.is_published } : t))
       )
     } catch (err) {
-      alert(err.message || 'Failed to change publish status')
+      modal.alert({ title: 'Update Failed', message: err.message || 'Failed to change publish status', variant: 'danger' })
     }
   }
 
@@ -175,7 +180,7 @@ export const TestList = () => {
       const newTest = await createTest(preset)
       navigate(`/tests/${newTest.id}/questions`)
     } catch (err) {
-      alert('Error creating test from template: ' + err.message)
+      modal.alert({ title: 'Template Error', message: err.message || 'Error creating test from template', variant: 'danger' })
     } finally {
       setIsActionLoading(false)
     }

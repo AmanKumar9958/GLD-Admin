@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useModal } from '../../context/ModalContext'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Spinner } from '../../components/ui/spinner'
@@ -8,6 +9,7 @@ import { deleteCourse, fetchCourses } from '../../services/courseService'
 
 export const CourseList = () => {
   const navigate = useNavigate()
+  const modal = useModal()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -29,7 +31,7 @@ export const CourseList = () => {
   }, [])
 
   const handleDelete = async (courseId) => {
-    const shouldDelete = window.confirm('Delete this course?')
+    const shouldDelete = await modal.confirm({ title: 'Delete Course?', message: 'Are you sure you want to delete this course? All modules, lectures, and resources will be permanently removed.', confirmText: 'Delete Course', variant: 'danger' })
     if (!shouldDelete) return
 
     try {

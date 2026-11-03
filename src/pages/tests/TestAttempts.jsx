@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useModal } from '../../context/ModalContext'
 import {
   ArrowLeft,
   Users,
@@ -31,6 +32,7 @@ import {
 
 export const TestAttempts = () => {
   const navigate = useNavigate()
+  const modal = useModal()
   const { id } = useParams()
 
   const [test, setTest] = useState(null)
@@ -51,7 +53,7 @@ export const TestAttempts = () => {
         setAttempts(attemptsData)
       } catch (err) {
         console.error('Failed to load test attempts:', err)
-        alert('Failed to load test submissions: ' + err.message)
+        modal.alert({ title: 'Error Loading Submissions', message: err.message || 'Failed to load test submissions', variant: 'danger' })
       } finally {
         setIsLoading(false)
       }
