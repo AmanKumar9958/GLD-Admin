@@ -167,6 +167,20 @@ export async function toggleTestPublish(testId, isPublished) {
 }
 
 /**
+ * Generate a valid RFC4122 v4 UUID
+ */
+export function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
+/**
  * Save questions for a test (upsert / delete batch)
  */
 export async function saveTestQuestions(testId, questionsList) {
@@ -194,9 +208,11 @@ export async function saveTestQuestions(testId, questionsList) {
 
   // Upsert current questions
   if (questionsList.length > 0) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const records = questionsList.map((q, idx) => {
-      const isNew = !q.id || String(q.id).startsWith('new_')
+      const isNew = !q.id || String(q.id).startsWith('new_') || !uuidRegex.test(String(q.id))
       const item = {
+        id: isNew ? generateUUID() : q.id,
         test_id: testId,
         section_name: q.section_name || 'General',
         question_text: q.question_text || '',
@@ -207,9 +223,6 @@ export async function saveTestQuestions(testId, questionsList) {
         order_index: idx + 1,
         positive_marks: q.positive_marks !== null && q.positive_marks !== undefined && q.positive_marks !== '' ? Number(q.positive_marks) : null,
         negative_marks: q.negative_marks !== null && q.negative_marks !== undefined && q.negative_marks !== '' ? Number(q.negative_marks) : null,
-      }
-      if (!isNew) {
-        item.id = q.id
       }
       return item
     })
