@@ -21,6 +21,7 @@ import {
   TrendingUp,
   FolderPlus,
   Check,
+  RotateCcw,
 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
@@ -100,6 +101,7 @@ export const TestList = () => {
   const [error, setError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
+  const [reattemptsOnlyFilter, setReattemptsOnlyFilter] = useState(false)
   const [categories, setCategories] = useState(['All', ...DEFAULT_CATEGORIES])
   const [showPresetMenu, setShowPresetMenu] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
@@ -194,9 +196,15 @@ export const TestList = () => {
         (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase()))
       const matchesCategory =
         selectedCategory === 'All' || t.category === selectedCategory
-      return matchesSearch && matchesCategory
+      const matchesReattempts =
+        !reattemptsOnlyFilter || t.has_reattempts
+      return matchesSearch && matchesCategory && matchesReattempts
     })
-  }, [tests, searchQuery, selectedCategory])
+  }, [tests, searchQuery, selectedCategory, reattemptsOnlyFilter])
+
+  const totalReattemptedTests = useMemo(() => {
+    return tests.filter((t) => t.has_reattempts).length
+  }, [tests])
 
   // Top Statistics
   const stats = useMemo(() => {
@@ -331,6 +339,19 @@ export const TestList = () => {
                 {cat}
               </button>
             ))}
+
+            <button
+              onClick={() => setReattemptsOnlyFilter((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                reattemptsOnlyFilter
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+              }`}
+              title="Show tests that have repeated student attempts"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>With Reattempts ({totalReattemptedTests})</span>
+            </button>
 
             <button
               onClick={() => setShowNewCategoryModal(true)}
@@ -476,10 +497,18 @@ export const TestList = () => {
                       <TableCell>
                         <button
                           onClick={() => navigate(`/tests/${test.id}/attempts`)}
-                          className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-blue-600"
+                          className="flex flex-col items-start gap-1 group text-left"
                         >
-                          <Users className="h-3.5 w-3.5 text-gray-400" />
-                          <span>{test.attempts_count} taken</span>
+                          <div className="flex items-center gap-1 text-xs font-medium text-gray-700 group-hover:text-blue-600">
+                            <Users className="h-3.5 w-3.5 text-gray-400 group-hover:text-blue-600" />
+                            <span>{test.attempts_count} taken</span>
+                          </div>
+                          {test.has_reattempts && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                              <RotateCcw className="h-2.5 w-2.5" />
+                              {test.reattempt_count} reattempt{test.reattempt_count === 1 ? '' : 's'}
+                            </span>
+                          )}
                         </button>
                       </TableCell>
 

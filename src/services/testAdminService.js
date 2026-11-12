@@ -22,7 +22,7 @@ export async function fetchAdminTests() {
   // Fetch attempt counts per test
   const { data: attempts } = await supabase
     .from('test_attempts')
-    .select('id, test_id, score')
+    .select('id, test_id, score, user_id')
 
   const qCountMap = {}
   if (questions) {
@@ -33,11 +33,23 @@ export async function fetchAdminTests() {
 
   const attCountMap = {}
   const topScoreMap = {}
+  const userAttemptsPerTest = {}
+  const reattemptCountMap = {}
+
   if (attempts) {
     attempts.forEach((a) => {
       attCountMap[a.test_id] = (attCountMap[a.test_id] || 0) + 1
       if (topScoreMap[a.test_id] === undefined || a.score > topScoreMap[a.test_id]) {
         topScoreMap[a.test_id] = a.score
+      }
+
+      if (!userAttemptsPerTest[a.test_id]) {
+        userAttemptsPerTest[a.test_id] = {}
+      }
+      const uId = a.user_id || 'anonymous'
+      userAttemptsPerTest[a.test_id][uId] = (userAttemptsPerTest[a.test_id][uId] || 0) + 1
+      if (userAttemptsPerTest[a.test_id][uId] > 1) {
+        reattemptCountMap[a.test_id] = (reattemptCountMap[a.test_id] || 0) + 1
       }
     })
   }
@@ -46,6 +58,8 @@ export async function fetchAdminTests() {
     ...t,
     questions_count: qCountMap[t.id] || 0,
     attempts_count: attCountMap[t.id] || 0,
+    reattempt_count: reattemptCountMap[t.id] || 0,
+    has_reattempts: (reattemptCountMap[t.id] || 0) > 0,
     top_score: topScoreMap[t.id] !== undefined ? topScoreMap[t.id] : null,
   }))
 }

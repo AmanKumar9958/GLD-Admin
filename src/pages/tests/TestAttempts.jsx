@@ -13,6 +13,8 @@ import {
   XCircle,
   HelpCircle,
   FileSpreadsheet,
+  RotateCcw,
+  Flag,
 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
@@ -39,6 +41,7 @@ export const TestAttempts = () => {
   const [attempts, setAttempts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all') // 'all' | 'first' | 'reattempts'
 
   useEffect(() => {
     async function loadData() {
@@ -68,30 +71,81 @@ export const TestAttempts = () => {
     return `${m}m ${s}s`
   }
 
+  // Group and rank attempts chronologically per student
+  const studentAttemptMeta = useMemo(() => {
+    const meta = {}
+    const grouped = {}
+
+    attempts.forEach((a) => {
+      const key = a.user_id || a.student_email || a.id
+      if (!grouped[key]) grouped[key] = []
+      grouped[key].push(a)
+    })
+
+    Object.values(grouped).forEach((userAttempts) => {
+      // Sort oldest to newest
+      const sorted = [...userAttempts].sort(
+        (a, b) => new Date(a.submitted_at || 0).getTime() - new Date(b.submitted_at || 0).getTime()
+      )
+      const total = sorted.length
+
+      sorted.forEach((att, idx) => {
+        const attemptNumber = idx + 1
+        const isReattempt = idx > 0
+        const prevAttempt = isReattempt ? sorted[idx - 1] : null
+        const scoreDiff = prevAttempt ? Number((att.score - prevAttempt.score).toFixed(2)) : null
+
+        meta[att.id] = {
+          attemptNumber,
+          totalAttemptsForStudent: total,
+          isReattempt,
+          previousAttemptScore: prevAttempt?.score ?? null,
+          scoreDiff,
+        }
+      })
+    })
+
+    return meta
+  }, [attempts])
+
   // Summary Metrics
   const summary = useMemo(() => {
     if (!attempts.length) {
-      return { total: 0, avgScore: 0, topScore: 0, avgAccuracy: 0 }
+      return { total: 0, uniqueStudents: 0, reattemptsCount: 0, avgScore: 0, topScore: 0, avgAccuracy: 0 }
     }
     const total = attempts.length
+    const uniqueUserIds = new Set(attempts.map((a) => a.user_id || a.student_email).filter(Boolean))
+    const uniqueStudents = uniqueUserIds.size
+    const reattemptsCount = Math.max(0, total - uniqueStudents)
+
     const topScore = Math.max(...attempts.map((a) => a.score))
     const totalScore = attempts.reduce((sum, a) => sum + a.score, 0)
     const avgScore = (totalScore / total).toFixed(1)
     const totalAccuracy = attempts.reduce((sum, a) => sum + (a.accuracy_percentage || 0), 0)
     const avgAccuracy = (totalAccuracy / total).toFixed(1)
 
-    return { total, avgScore, topScore, avgAccuracy }
+    return { total, uniqueStudents, reattemptsCount, avgScore, topScore, avgAccuracy }
   }, [attempts])
 
   const filteredAttempts = useMemo(() => {
     return attempts.filter((a) => {
       const q = searchQuery.toLowerCase()
-      return (
+      const matchesSearch =
         (a.student_name && a.student_name.toLowerCase().includes(q)) ||
         (a.student_email && a.student_email.toLowerCase().includes(q))
-      )
+
+      if (!matchesSearch) return false
+
+      const meta = studentAttemptMeta[a.id]
+      if (categoryFilter === 'first') {
+        return meta?.attemptNumber === 1
+      }
+      if (categoryFilter === 'reattempts') {
+        return meta?.isReattempt === true
+      }
+      return true
     })
-  }, [attempts, searchQuery])
+  }, [attempts, searchQuery, categoryFilter, studentAttemptMeta])
 
   if (isLoading) {
     return (
@@ -146,8 +200,14 @@ export const TestAttempts = () => {
         <Card className="border-gray-200">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Test Takers</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Submissions</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{summary.total}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {summary.uniqueStudents} student{summary.uniqueStudents === 1 ? '' : 's'} •{' '}
+                <span className={summary.reattemptsCount > 0 ? 'text-indigo-600 font-semibold' : ''}>
+                  {summary.reattemptsCount} reattempt{summary.reattemptsCount === 1 ? '' : 's'}
+                </span>
+              </p>
             </div>
             <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
               <Users className="h-6 w-6" />
@@ -199,8 +259,48 @@ export const TestAttempts = () => {
       {/* Submissions Table */}
       <Card className="border-gray-200">
         <CardHeader className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="font-bold text-sm text-gray-800">
-            All Student Attempts ({filteredAttempts.length})
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="font-bold text-sm text-gray-800">
+              Student Submissions ({filteredAttempts.length})
+            </div>
+
+            {/* Categorization Tabs */}
+            <div className="inline-flex items-center rounded-lg bg-gray-100 p-1 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('all')}
+                className={`rounded-md px-2.5 py-1 transition-all ${
+                  categoryFilter === 'all'
+                    ? 'bg-white text-gray-900 shadow-sm font-bold'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                All ({attempts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('first')}
+                className={`rounded-md px-2.5 py-1 transition-all ${
+                  categoryFilter === 'first'
+                    ? 'bg-white text-gray-900 shadow-sm font-bold'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                1st Attempts ({summary.uniqueStudents})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('reattempts')}
+                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 transition-all ${
+                  categoryFilter === 'reattempts'
+                    ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                    : 'text-indigo-600 hover:text-indigo-900'
+                }`}
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reattempts ({summary.reattemptsCount})
+              </button>
+            </div>
           </div>
 
           <div className="relative w-full sm:w-64">
@@ -239,21 +339,48 @@ export const TestAttempts = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAttempts.map((item) => (
-                    <TableRow key={item.id} className="hover:bg-gray-50/80">
-                      <TableCell>
-                        <div className="font-semibold text-sm text-gray-900">
-                          {item.student_name}
-                        </div>
-                        <div className="text-xs text-gray-400">{item.student_email}</div>
-                      </TableCell>
+                  {filteredAttempts.map((item) => {
+                    const meta = studentAttemptMeta[item.id]
 
-                      <TableCell>
-                        <span className="font-bold text-gray-900 text-sm">
-                          {item.score}
-                        </span>
-                        <span className="text-xs text-gray-400">/{test?.total_marks || item.total_marks}</span>
-                      </TableCell>
+                    return (
+                      <TableRow key={item.id} className="hover:bg-gray-50/80">
+                        <TableCell>
+                          <div className="font-semibold text-sm text-gray-900 flex items-center gap-2 flex-wrap">
+                            <span>{item.student_name}</span>
+                            {meta?.isReattempt ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 border border-indigo-200">
+                                <RotateCcw className="h-3 w-3" />
+                                {meta.attemptNumber > 2 ? `Reattempt #${meta.attemptNumber - 1}` : 'Reattempt'}
+                              </span>
+                            ) : meta?.totalAttemptsForStudent > 1 ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 border border-gray-200">
+                                <Flag className="h-3 w-3 text-gray-400" />
+                                1st Attempt
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-xs text-gray-400">{item.student_email}</div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="flex items-baseline gap-1">
+                            <span className="font-bold text-gray-900 text-sm">
+                              {item.score}
+                            </span>
+                            <span className="text-xs text-gray-400">/{test?.total_marks || item.total_marks}</span>
+                          </div>
+                          {meta?.isReattempt && meta?.scoreDiff !== null && (
+                            <div className={`text-[11px] font-semibold mt-0.5 ${
+                              meta.scoreDiff > 0
+                                ? 'text-emerald-600'
+                                : meta.scoreDiff < 0
+                                ? 'text-rose-600'
+                                : 'text-gray-400'
+                            }`}>
+                              {meta.scoreDiff > 0 ? `+${meta.scoreDiff}` : meta.scoreDiff} vs 1st attempt
+                            </div>
+                          )}
+                        </TableCell>
 
                       <TableCell className="text-center">
                         <span className="inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
@@ -283,7 +410,8 @@ export const TestAttempts = () => {
                           : 'N/A'}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )
+                })}
                 </TableBody>
               </Table>
             </div>
