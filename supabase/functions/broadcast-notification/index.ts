@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     const adminClient = createClient(supabaseUrl, supabaseServiceKey)
     let isAdmin = false;
 
-    if (user.email === 'admin@gld2026') {
+    if (user.email === 'admin@gld2020' || user.email === 'admin@gld2020.com' || user.email === 'admin@gld2026' || user.email === 'admin@gld2026.com') {
       isAdmin = true;
     } else {
       const { data: profile, error: profileError } = await adminClient
