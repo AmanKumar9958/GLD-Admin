@@ -21,6 +21,9 @@ import {
   Layers,
   ArrowUp,
   ArrowDown,
+  Upload,
+  ExternalLink,
+  X,
 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card'
@@ -39,6 +42,7 @@ import {
   fetchTestWithQuestions,
   saveTestQuestions,
 } from '../../services/testAdminService'
+import { uploadQuestionDiagram } from '../../services/cloudinaryService'
 
 const DEFAULT_SECTIONS = [
   'General Intelligence & Reasoning',
@@ -65,6 +69,8 @@ export const QuestionManager = () => {
   const [customSections, setCustomSections] = useState([])
   const [customSectionInput, setCustomSectionInput] = useState('')
   const [showCustomSectionModal, setShowCustomSectionModal] = useState(false)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const fileInputRef = useRef(null)
 
   const getDraftKey = (testId) => 'gld_questions_draft_' + testId;
 
@@ -194,6 +200,63 @@ export const QuestionManager = () => {
       return updated
     })
     setHasUnsavedChanges(true)
+  }
+
+  const cleanImageUrl = (rawUrl) => {
+    if (!rawUrl) return ''
+    let val = String(rawUrl).trim()
+    if (val.includes('google.') && val.includes('imgurl=')) {
+      try {
+        const match = val.match(/[?&]imgurl=([^&]+)/)
+        if (match && match[1]) {
+          val = decodeURIComponent(match[1])
+        }
+      } catch (e) {}
+    }
+    return val
+  }
+
+  const handleImageUrlChange = (val) => {
+    updateCurrentQuestion('question_image_url', cleanImageUrl(val))
+  }
+
+  const handleImageFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      await modal.alert({
+        title: 'Invalid File',
+        message: 'Please select an image file (PNG, JPG, JPEG, WEBP, SVG).',
+        variant: 'warning',
+      })
+      return
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      await modal.alert({
+        title: 'File Too Large',
+        message: 'Image size should be less than 8MB.',
+        variant: 'warning',
+      })
+      return
+    }
+
+    try {
+      setIsUploadingImage(true)
+      const uploadedUrl = await uploadQuestionDiagram(file)
+      updateCurrentQuestion('question_image_url', uploadedUrl)
+    } catch (err) {
+      console.error('Failed to upload diagram image:', err)
+      await modal.alert({
+        title: 'Upload Failed',
+        message: err.message || 'Failed to upload image. Please check your internet connection or use an image link.',
+        variant: 'danger',
+      })
+    } finally {
+      setIsUploadingImage(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   // Update specific option
@@ -328,7 +391,7 @@ export const QuestionManager = () => {
             id: 'new_' + Date.now() + '_' + idx,
             section_name: item.section || item.section_name || DEFAULT_SECTIONS[0],
             question_text: item.question || item.question_text || '',
-            question_image_url: item.image_url || '',
+            question_image_url: cleanImageUrl(item.question_image_url || item.image_url || item.image || item.diagram || ''),
             options: item.options || ['', '', '', ''],
             correct_option_index: Number(item.correct_index ?? item.correct_option_index ?? 0),
             explanation: item.explanation || '',
@@ -348,6 +411,7 @@ export const QuestionManager = () => {
 
       // Plain text block parser:
       // Question text
+      // Image: https://... (optional)
       // A) Option 1
       // B) Option 2
       // C) Option 3
@@ -364,11 +428,13 @@ export const QuestionManager = () => {
           const opts = []
           let ansIdx = 0
           let explanation = ''
+          let questionImageUrl = ''
 
           lines.slice(1).forEach((line) => {
             const optMatch = line.match(/^([A-D1-4])[).:]\s*(.*)$/i)
             const ansMatch = line.match(/^(?:Answer|Ans)[.:]\s*([A-D1-4])/i)
             const expMatch = line.match(/^(?:Explanation|Solution)[.:]\s*(.*)$/i)
+            const imgMatch = line.match(/^(?:Image|Diagram|Figure|Photo|Img)[.:]\s*(https?:\/\/\S+)/i)
 
             if (optMatch && opts.length < 4) {
               opts.push(optMatch[2])
@@ -380,6 +446,8 @@ export const QuestionManager = () => {
               if (letter === 'D' || letter === '4') ansIdx = 3
             } else if (expMatch) {
               explanation = expMatch[1]
+            } else if (imgMatch) {
+              questionImageUrl = cleanImageUrl(imgMatch[1])
             }
           })
 
@@ -391,7 +459,7 @@ export const QuestionManager = () => {
             id: 'new_' + Date.now() + '_' + bIdx,
             section_name: currentQuestion?.section_name || DEFAULT_SECTIONS[0],
             question_text: qText,
-            question_image_url: '',
+            question_image_url: questionImageUrl,
             options: opts,
             correct_option_index: ansIdx,
             explanation,
@@ -606,13 +674,18 @@ export const QuestionManager = () => {
                           <span className="italic text-gray-400">Blank question text...</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-gray-500 truncate max-w-[130px]">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-[10px] text-gray-500 truncate max-w-[110px]">
                           {q.section_name || 'General'}
                         </span>
-                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded">
-                          Ans: Opt {q.correct_option_index + 1}
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                          Opt {q.correct_option_index + 1}
                         </span>
+                        {q.question_image_url ? (
+                          <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200 flex items-center gap-0.5">
+                            <ImageIcon className="h-2.5 w-2.5" /> Diagram
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
@@ -723,30 +796,119 @@ export const QuestionManager = () => {
                   />
                 </div>
 
-                {/* Question Image URL (optional) */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
+                {/* Question Image / Diagram (Optional) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
                     <Label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                      <ImageIcon className="h-3.5 w-3.5 text-gray-500" />
-                      <span>Optional Diagram / Figure Image URL</span>
+                      <ImageIcon className="h-3.5 w-3.5 text-blue-600" />
+                      <span>Optional Diagram / Figure Image</span>
                     </Label>
+                    <span className="text-[11px] text-gray-400">
+                      Paste web/Google link or upload file from PC
+                    </span>
                   </div>
-                  <Input
-                    value={currentQuestion.question_image_url || ''}
-                    onChange={(e) => updateCurrentQuestion('question_image_url', e.target.value)}
-                    placeholder="https://... (image URL for math/reasoning questions if any)"
-                    className="text-xs"
-                  />
-                  {currentQuestion.question_image_url ? (
-                    <div className="mt-2 p-2 border border-gray-200 rounded-md bg-gray-50 flex items-center gap-2">
-                      <img
-                        src={currentQuestion.question_image_url}
-                        alt="Question Preview"
-                        className="max-h-24 rounded object-contain"
-                        onError={(e) => {
-                          e.target.style.display = 'none'
-                        }}
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        value={currentQuestion.question_image_url || ''}
+                        onChange={(e) => handleImageUrlChange(e.target.value)}
+                        placeholder="Paste image link here, e.g. https://... (or click Upload)"
+                        className="text-xs pr-8"
                       />
+                      {currentQuestion.question_image_url ? (
+                        <button
+                          type="button"
+                          onClick={() => updateCurrentQuestion('question_image_url', '')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                          title="Clear link"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleImageFileUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingImage}
+                      className="text-xs h-9 px-3 flex items-center gap-1.5 shrink-0 bg-white border-gray-300 hover:bg-gray-50"
+                    >
+                      {isUploadingImage ? (
+                        <Spinner size="xs" label="Uploading..." />
+                      ) : (
+                        <Upload className="h-3.5 w-3.5 text-gray-600" />
+                      )}
+                      <span>{isUploadingImage ? 'Uploading...' : 'Upload Image'}</span>
+                    </Button>
+                  </div>
+
+                  {/* Image Preview Card */}
+                  {currentQuestion.question_image_url ? (
+                    <div className="p-3 border border-gray-200 rounded-lg bg-gray-50/70 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-14 w-20 bg-white rounded border border-gray-200 flex items-center justify-center p-1 shrink-0 overflow-hidden shadow-2xs">
+                          <img
+                            src={currentQuestion.question_image_url}
+                            alt="Question Diagram Preview"
+                            className="max-h-full max-w-full object-contain"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                              if (e.currentTarget.nextSibling) {
+                                e.currentTarget.nextSibling.style.display = 'flex'
+                              }
+                            }}
+                          />
+                          <div style={{ display: 'none' }} className="w-full h-full items-center justify-center text-[10px] text-red-500 text-center font-medium">
+                            Invalid URL
+                          </div>
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-gray-800">
+                              Diagram Attached
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-emerald-100 text-emerald-800">
+                              Active
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 truncate max-w-xs sm:max-w-md mt-0.5">
+                            {currentQuestion.question_image_url}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <a
+                          href={currentQuestion.question_image_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-white rounded border border-transparent hover:border-gray-200 transition-colors"
+                          title="Open original image in new tab"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => updateCurrentQuestion('question_image_url', '')}
+                          className="h-7 text-xs px-2 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        >
+                          Remove
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
                 </div>

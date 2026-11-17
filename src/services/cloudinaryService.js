@@ -38,3 +38,42 @@ export async function uploadImageToCloudinary(file) {
   // Return the highly optimized secure HTTPS URL
   return optimizeCloudinaryUrl(data.secure_url);
 }
+
+/**
+ * Uploads a question diagram/figure to Cloudinary without fixed aspect ratio cropping
+ */
+export async function uploadQuestionDiagram(file) {
+  const cloudName = import.meta.env.VITE_CLOUD_NAME;
+  const uploadPreset = "gld_thumbnails";
+
+  if (!cloudName) {
+    throw new Error("Cloud name is missing from environment variables.");
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', uploadPreset);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+    {
+      method: 'POST',
+      body: formData,
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Failed to upload image to Cloudinary");
+  }
+
+  // Preserve diagram aspect ratio while auto-optimizing format & quality
+  const optimizeDiagramUrl = (rawUrl) => {
+    if (!rawUrl) return "";
+    const transformation = "f_auto,q_auto";
+    return rawUrl.replace("/upload/", `/upload/${transformation}/`);
+  };
+
+  return optimizeDiagramUrl(data.secure_url);
+}
